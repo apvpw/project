@@ -133,6 +133,12 @@ function DependencyRow({
                     PyPI не проверен. Название можно указать вручную.
                   </p>
                 )}
+              {!packageName && suggestion?.status === "withheld" && (
+                <p className="field-hint">
+                  Поиск не выполнялся: импорт связан с файлом с признаками
+                  секретов. Укажите пакет вручную.
+                </p>
+              )}
             </td>
             <td>
               <input
@@ -219,6 +225,12 @@ export default function Dependencies({
       (dependency.kind === "external" || dependency.kind === "unknown") &&
       !dependency.package,
   ).length;
+  const externalCount = dependencies.filter((dependency) =>
+    ["external", "unknown"].includes(dependency.kind),
+  ).length;
+  const localCount = dependencies.filter(
+    (dependency) => dependency.kind === "local",
+  ).length;
 
   const shown = dependencies.filter((dependency) => {
     const needsInstall =
@@ -238,8 +250,18 @@ export default function Dependencies({
   return (
     <section aria-label="Проверка зависимостей">
       <div className="project-summary">
-        <span>Файлов: {analysis.files.length}</span>
-        {analysis.stack.length > 0 && <span>{analysis.stack.join(", ")}</span>}
+        <span>
+          <strong>{externalCount}</strong> к установке
+        </span>
+        <span>
+          <strong>{localCount}</strong> локальных модулей
+        </span>
+        <span>
+          <strong>{analysis.files.length}</strong> файлов
+        </span>
+        {analysis.stack.length > 0 && (
+          <span className="project-stack">{analysis.stack.join(" · ")}</span>
+        )}
       </div>
       <div className="python-note">
         <strong>
@@ -256,15 +278,14 @@ export default function Dependencies({
           !dependency.version,
       ) && (
         <p className="version-note">
-          По import версию определить нельзя. Пустое поле означает, что она не
-          найдена в файлах зависимостей. Впишите известную версию или оставьте
-          поле пустым.
+          Пустая версия — она не задана в проекте. Оставьте поле пустым или
+          укажите известное ограничение.
         </p>
       )}
       {unresolved > 0 && (
         <p className="notice">
-          Пакеты не определены для {unresolved} импортов. Уточните их или
-          оставьте в черновике.
+          Нужно уточнить пакеты: {unresolved}. Найденные варианты показаны в
+          таблице; их можно подтвердить или оставить в черновике.
         </p>
       )}
       {packageSearch.pending && (

@@ -12,6 +12,8 @@ export default function App() {
   const [environment, setEnvironment] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [dependencies, setDependencies] = useState([]);
+  const [dependenciesReviewed, setDependenciesReviewed] = useState(false);
+  const [downloadedOptions, setDownloadedOptions] = useState(null);
   const [packageSearch, setPackageSearch] = useState({
     pending: false,
     results: {},
@@ -42,6 +44,14 @@ export default function App() {
     }),
     [settings, analysis, dependencies],
   );
+  const packageDownloaded = analysisReady && downloadedOptions === options;
+  const completedSteps = !analysisReady
+    ? 0
+    : packageDownloaded
+      ? 3
+      : dependenciesReviewed
+        ? 2
+        : 1;
 
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
@@ -66,6 +76,8 @@ export default function App() {
       setAnalysis(result);
       analyzedInput.current = { files, environment };
       setDependencies(result.dependencies);
+      setDependenciesReviewed(false);
+      setDownloadedOptions(null);
       const match = result.python_requirement.match(/3\.(\d+)/);
       const minor = match ? Number(match[1]) : 12;
       const pythonVersion = minor >= 9 && minor <= 15 ? `3.${minor}` : "3.12";
@@ -102,6 +114,8 @@ export default function App() {
       setAnalysis(null);
       analyzedInput.current = null;
       setDependencies([]);
+      setDependenciesReviewed(false);
+      setDownloadedOptions(null);
       setPackageSearch({ pending: false, results: {}, error: "" });
       setFiles([]);
       setEnvironment(null);
@@ -119,6 +133,7 @@ export default function App() {
   }
 
   function changeDependency(module, field, value) {
+    setDependenciesReviewed(false);
     setDependencies((current) =>
       current.map((dependency) =>
         dependency.module === module
@@ -142,9 +157,7 @@ export default function App() {
           <span className="brand" translate="no">
             Перенос
           </span>
-          <span className="header-description">
-            Подготовка Python-проекта к запуску
-          </span>
+          <span className="header-description">Упаковщик Python-проектов</span>
           <div className="header-actions">
             <button
               className="text-button"
@@ -161,20 +174,45 @@ export default function App() {
         </div>
       </header>
 
-      <main
-        id="main-content"
-        className={`app-layout${step === 1 ? "" : " compact-layout"}`}
-      >
+      <main id="main-content" className="app-layout">
         <nav className="workflow" aria-label="Этапы подготовки">
+          <div className="workflow-status">
+            <span>
+              {packageDownloaded ? "Пакет подготовлен" : "Подготовка проекта"}
+            </span>
+            <span>
+              Завершено {completedSteps} из {steps.length}
+            </span>
+          </div>
+          <progress
+            className="workflow-progress"
+            max={steps.length}
+            value={completedSteps}
+            aria-label="Прогресс подготовки пакета"
+            aria-valuetext={`Завершено этапов: ${completedSteps} из ${steps.length}`}
+          />
           <ol className="step-list">
             {steps.map((title, index) => (
-              <li key={title}>
+              <li
+                key={title}
+                className={index < completedSteps ? "is-complete" : ""}
+              >
                 <button
                   aria-current={step === index ? "step" : undefined}
-                  disabled={busy || (index > 0 && !analysisReady)}
+                  disabled={
+                    busy ||
+                    (index > 0 && !analysisReady) ||
+                    (index === 2 && !dependenciesReviewed)
+                  }
                   onClick={() => changeStep(index)}
                 >
+                  <span className="step-index" aria-hidden="true">
+                    {index < completedSteps ? "✓" : index + 1}
+                  </span>
                   {title}
+                  <span className="sr-only">
+                    {index < completedSteps ? ", завершён" : ""}
+                  </span>
                 </button>
               </li>
             ))}
@@ -187,12 +225,14 @@ export default function App() {
               ? "Загрузите проект"
               : step === 1
                 ? "Проверьте зависимости"
-                : "Скачайте проект"}
+                : packageDownloaded
+                  ? "Пакет подготовлен"
+                  : "Скачайте проект"}
           </h1>
           {step === 0 && (
             <p>
-              Добавьте код и данные. Получите ZIP с исходниками,
-              requirements.txt и инструкцией запуска.
+              Передайте код и пример данных. Мы подготовим зависимости и
+              инструкцию для запуска на другом компьютере.
             </p>
           )}
           {step === 1 && (
@@ -233,7 +273,10 @@ export default function App() {
               onChange={changeDependency}
               packageSearch={packageSearch}
               onBack={() => changeStep(0)}
-              onContinue={() => changeStep(2)}
+              onContinue={() => {
+                setDependenciesReviewed(true);
+                changeStep(2);
+              }}
             />
           )}
           {step === 2 && analysisReady && (
@@ -242,6 +285,8 @@ export default function App() {
               options={options}
               onOption={changeOption}
               onBack={() => changeStep(1)}
+              downloaded={packageDownloaded}
+              onDownloaded={() => setDownloadedOptions(options)}
             />
           )}
         </div>

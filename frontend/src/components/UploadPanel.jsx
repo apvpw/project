@@ -138,7 +138,7 @@ export default function UploadPanel({
 
   const pickers = (
     <details className="project-picker">
-      <summary className="button">
+      <summary className={`button${files.length ? "" : " primary"}`}>
         {files.length ? "Добавить или заменить" : "Выбрать проект"}
       </summary>
       <div className="picker-options">
@@ -171,144 +171,179 @@ export default function UploadPanel({
 
   return (
     <section aria-label="Загрузка проекта">
-      <div
-        className={`dropzone ${dragging ? "is-dragging" : ""}`}
-        onDragOver={dragOver}
-        onDragLeave={dragLeave}
-        onDrop={dropFiles}
-      >
-        {files.length === 0 ? (
-          <div className="upload-placeholder">
-            <h2>
-              {dragging ? "Отпустите файлы здесь" : "Перетащите файлы сюда"}
-            </h2>
-            <p>ZIP, RAR, папка или отдельные файлы. До 20 МБ.</p>
-            {pickers}
-          </div>
-        ) : (
-          <>
-            {folderName ? (
-              <div className="folder-selection">
-                <div className="file-name">
-                  <strong>{folderName}/</strong>
-                  <span>
-                    Файлов: {files.length} ·{" "}
-                    {sizeLabel(
-                      files.reduce((total, file) => total + file.size, 0),
-                    )}
-                  </span>
-                </div>
-                <button
-                  className="text-button"
-                  disabled={busy}
-                  onClick={() => setFiles([])}
-                >
-                  Убрать папку
-                </button>
+      <div className="upload-layout">
+        <div className="upload-main">
+          <div
+            className={`dropzone ${dragging ? "is-dragging" : ""}`}
+            onDragOver={dragOver}
+            onDragLeave={dragLeave}
+            onDrop={dropFiles}
+          >
+            {files.length === 0 ? (
+              <div className="upload-placeholder">
+                <h2>
+                  {dragging ? "Отпустите файлы здесь" : "Перетащите файлы сюда"}
+                </h2>
+                <p>ZIP, RAR, папка или отдельные файлы. До 20 МБ.</p>
+                {pickers}
               </div>
             ) : (
-              <ul className="file-list" aria-label="Выбранные файлы">
-                {files.map((file) => (
-                  <li key={filePath(file)}>
+              <>
+                {folderName ? (
+                  <div className="folder-selection">
                     <div className="file-name">
-                      <strong>{file.name}</strong>
-                      <span>{sizeLabel(file.size)}</span>
+                      <strong>{folderName}/</strong>
+                      <span>
+                        Файлов: {files.length} ·{" "}
+                        {sizeLabel(
+                          files.reduce((total, file) => total + file.size, 0),
+                        )}
+                      </span>
                     </div>
                     <button
                       className="text-button"
-                      aria-label={`Убрать ${file.name}`}
                       disabled={busy}
-                      onClick={() =>
-                        setFiles(files.filter((item) => item !== file))
-                      }
+                      onClick={() => setFiles([])}
                     >
-                      Убрать
+                      Убрать папку
                     </button>
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                ) : (
+                  <ul className="file-list" aria-label="Выбранные файлы">
+                    {files.map((file) => (
+                      <li key={filePath(file)}>
+                        <div className="file-name">
+                          <strong>{file.name}</strong>
+                          <span>{sizeLabel(file.size)}</span>
+                        </div>
+                        <button
+                          className="text-button"
+                          aria-label={`Убрать ${file.name}`}
+                          disabled={busy}
+                          onClick={() =>
+                            setFiles(files.filter((item) => item !== file))
+                          }
+                        >
+                          Убрать
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {pickers}
+              </>
             )}
-            {pickers}
-          </>
-        )}
-      </div>
+          </div>
 
-      {reading && (
-        <p className="field-hint" role="status">
-          Читаем структуру проекта…
-        </p>
-      )}
-      {structure && (
-        <>
-          <FileTree paths={structure.files} name={structure.name} />
-          {structure.skipped > 0 && (
-            <p className="field-hint">
-              Служебные файлы и окружения пропущены: {structure.skipped}.
+          {reading && (
+            <p className="field-hint" role="status">
+              Читаем структуру проекта…
             </p>
           )}
-        </>
-      )}
+          {structure && (
+            <>
+              <FileTree paths={structure.files} name={structure.name} />
+              {structure.skipped > 0 && (
+                <p className="field-hint">
+                  Служебные файлы и окружения пропущены: {structure.skipped}.
+                </p>
+              )}
+            </>
+          )}
 
-      <p className="upload-note">
-        Добавьте локальные модули и пример данных вместе с кодом. Чужой код не
-        запускается; загрузка удаляется через 30 минут.
-        {folderName &&
-          " Служебные папки (.venv, .git, node_modules) не отправляются. До 100 файлов в папке."}
-      </p>
-
-      <details className="environment-input">
-        <summary>Версии с компьютера автора (необязательно)</summary>
-        <p>
-          Этот шаг можно пропустить. JSON — обычный текстовый файл со списком
-          версий Python и библиотек. Он помогает, если в проекте не указаны
-          версии зависимостей.
-        </p>
-        <a href="/api/environment-script" download="environment_report.py">
-          Скачать скрипт сбора версий
-        </a>
-        <p>
-          В окружении, где ваш проект уже работает, выполните{" "}
-          <code>python environment_report.py</code>. Затем приложите созданный
-          файл <code>environment-report.json</code>. Код проекта и переменные
-          окружения не собираются.
-        </p>
-        <label className="file-picker-label">
-          Прикрепить список версий
-          <input
-            type="file"
-            name="environment"
-            accept=".json"
-            disabled={busy}
-            onChange={chooseEnvironment}
-          />
-        </label>
-        {environment && (
-          <div className="inline-file">
-            <span>{environment.name}</span>
+          <p className="upload-note">
+            Код читается без запуска. Передайте локальные модули и пример данных
+            вместе с исходниками.
+            {folderName &&
+              " Служебные папки (.venv, .git, node_modules) не отправляются. До 100 файлов в папке."}
+          </p>
+          <div className="panel-actions">
+            <span className="field-hint">
+              {structure
+                ? `В проекте ${structure.files.length} файлов`
+                : "Сначала выберите проект"}
+            </span>
             <button
-              className="text-button"
-              disabled={busy}
-              onClick={() => setEnvironment(null)}
+              className="button primary"
+              disabled={!structure || reading || busy}
+              onClick={onAnalyze}
             >
-              Убрать отчёт
+              {busy ? "Анализируем…" : "Проверить зависимости"}
             </button>
           </div>
-        )}
-      </details>
-      <p className="field-hint">
-        Неизвестные имена импортов проверяются в PyPI. Исходный код туда не
-        отправляется.
-      </p>
+        </div>
+        <aside className="upload-aside" aria-label="Результат подготовки">
+          <h2 className="section-title">Что будет в архиве</h2>
+          <p className="aside-intro">Ваши исходники и данные, а также:</p>
+          <dl className="package-files">
+            <div>
+              <dt>
+                <code>README.md</code>
+              </dt>
+              <dd>Установка и команда запуска</dd>
+            </div>
+            <div>
+              <dt>
+                <code>requirements.txt</code>
+              </dt>
+              <dd>Список библиотек для pip</dd>
+            </div>
+            <div>
+              <dt>
+                <code>REPORT.md</code>
+              </dt>
+              <dd>Предупреждения и вопросы для проверки</dd>
+            </div>
+          </dl>
 
-      <div className="panel-actions">
-        <span className="field-hint">Структура папок сохранится в ZIP.</span>
-        <button
-          className="button primary"
-          disabled={!structure || reading || busy}
-          onClick={onAnalyze}
-        >
-          {busy ? "Анализируем…" : "Продолжить"}
-        </button>
+          <details className="environment-input">
+            <summary>
+              Версии среды{" "}
+              <span>{environment ? "Прикреплены" : "Необязательно"}</span>
+            </summary>
+            <p>
+              Если проект работает у автора, можно приложить список
+              установленных версий Python и библиотек.
+            </p>
+            <a href="/api/environment-script" download="environment_report.py">
+              Скачать скрипт
+            </a>
+            <p>Запустите его в рабочем окружении проекта:</p>
+            <code className="environment-command">
+              python environment_report.py
+            </code>
+            <p>
+              Прикрепите созданный <code>environment-report.json</code> — это
+              текстовый список версий. Этот шаг можно пропустить.
+            </p>
+            <label className="file-picker button">
+              <span>Прикрепить список версий</span>
+              <input
+                type="file"
+                name="environment"
+                accept=".json"
+                disabled={busy}
+                onChange={chooseEnvironment}
+              />
+            </label>
+            {environment && (
+              <div className="inline-file">
+                <span>{environment.name}</span>
+                <button
+                  className="text-button"
+                  disabled={busy}
+                  onClick={() => setEnvironment(null)}
+                >
+                  Убрать отчёт
+                </button>
+              </div>
+            )}
+          </details>
+          <p className="processing-note">
+            Загрузка хранится до 30 минут. В PyPI проверяются только неизвестные
+            имена импортов; исходники туда не отправляются.
+          </p>
+        </aside>
       </div>
     </section>
   );

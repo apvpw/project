@@ -195,7 +195,10 @@ def get_session(analysis_id: str):
 @app.get("/api/projects/{analysis_id}/pypi")
 async def pypi_suggestions(analysis_id: str):
     _, analysis = get_session(analysis_id)
-    return await search_unknowns(analysis.dependencies)
+    private_files = {
+        warning.file for warning in analysis.warnings if warning.code == "secret"
+    }
+    return await search_unknowns(analysis.dependencies, private_files)
 
 
 @app.get("/api/environment-script")

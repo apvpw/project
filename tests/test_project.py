@@ -616,6 +616,19 @@ class ApiTests(unittest.TestCase):
         response = self.client.get("/api/projects/missing/pypi")
         self.assertEqual(response.status_code, 404)
 
+    def test_imports_from_files_with_secrets_are_not_sent_to_pypi(self):
+        source = b"import research_widget\nAPI_KEY = 'not-a-real-secret-value'\n"
+        response = self.client.post(
+            "/api/analyze", files=[("files", ("main.py", source))]
+        )
+        self.assertEqual(response.status_code, 200)
+        analysis = response.json()
+        self.assertTrue(any(item["code"] == "secret" for item in analysis["warnings"]))
+        lookup = self.client.get(f"/api/projects/{analysis['id']}/pypi")
+        self.assertEqual(lookup.status_code, 200)
+        self.assertEqual(lookup.json(), {"research_widget": {"status": "withheld"}})
+        self.client.delete(f"/api/projects/{analysis['id']}")
+
     def test_folder_paths_survive_analysis_and_download(self):
         sources = {
             "demo/main.py": b"from utils.helpers import message",

@@ -57,19 +57,28 @@ async def query_package(name: str, client: httpx.AsyncClient) -> dict:
     return result
 
 
-async def search_unknowns(dependencies) -> dict:
+async def search_unknowns(dependencies, private_files=()) -> dict:
+    withheld = {
+        dependency.module
+        for dependency in dependencies
+        if dependency.kind == "unknown"
+        and dependency.lookup_allowed
+        and any(evidence.file in private_files for evidence in dependency.evidence)
+    }
+    results = {name: {"status": "withheld"} for name in withheld}
     unknown = [
         dependency.module
         for dependency in dependencies
         if dependency.kind == "unknown"
         and not dependency.package
         and dependency.lookup_allowed
+        and dependency.module not in withheld
     ]
     if not unknown:
-        return {}
+        return results
     selected = unknown[:MAX_LOOKUPS]
     semaphore = asyncio.Semaphore(6)
-    results = {name: {"status": "skipped"} for name in unknown}
+    results.update({name: {"status": "skipped"} for name in unknown})
     async with httpx.AsyncClient(
         timeout=3, follow_redirects=False, trust_env=False
     ) as client:

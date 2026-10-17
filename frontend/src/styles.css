@@ -12,6 +12,7 @@
   --page: #f4f6f9;
   --surface: #ffffff;
   --tint: #f7f9fc;
+  --success: #28735b;
 }
 
 * {
@@ -141,83 +142,80 @@ code {
   top: 0;
   z-index: 10;
   background: var(--page);
-  padding: 22px 0 18px;
-  border-bottom: 1px solid var(--line);
-}
-.workflow-status {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 12px;
-}
-.workflow-status > span:first-child {
-  color: var(--ink);
-  font-weight: 500;
-}
-.workflow-status > span:last-child {
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.workflow-progress {
-  display: block;
-  appearance: none;
-  width: 100%;
-  height: 5px;
-  border: 0;
-  border-radius: 4px;
-  overflow: hidden;
-  background: #dce3ee;
-  color: var(--blue);
-}
-.workflow-progress::-webkit-progress-bar {
-  background: #dce3ee;
-}
-.workflow-progress::-webkit-progress-value {
-  background: var(--blue);
-  transition: width 180ms ease-out;
-}
-.workflow-progress::-moz-progress-bar {
-  background: var(--blue);
+  padding: 20px 0 0;
 }
 .step-list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   list-style: none;
-  gap: 20px;
-  margin: 14px 0 0;
-  padding: 0;
+  gap: 8px;
+  margin: 0;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
 }
 .step-list li {
   min-width: 0;
 }
 .step-list button {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 9px;
-  background: none;
-  border: none;
-  padding: 3px 0;
+  gap: 12px;
+  width: 100%;
+  min-height: 70px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  padding: 10px 16px 14px;
   color: var(--muted);
-  font-size: 13px;
+  text-align: left;
+  transition: background-color 140ms ease;
+}
+.step-list button::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 12px;
+  right: 12px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--line);
+  transition: background-color 140ms ease;
 }
 .step-index {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
-  border: 1px solid #c7d1df;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border: 1px solid var(--line);
   border-radius: 50%;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
-.is-complete .step-index {
-  color: var(--blue);
-  border-color: #bccbea;
-  background: #eaf0fc;
+.step-index svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.step-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.step-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.step-status {
+  font-size: 11px;
 }
 .step-list [aria-current="step"] .step-index {
   color: #fff;
@@ -226,10 +224,41 @@ code {
 }
 .step-list button[aria-current="step"] {
   color: var(--blue);
-  font-weight: 550;
+  background: #f0f4ff;
 }
-.step-list button:hover:not(:disabled) {
+.step-list [aria-current="step"] .step-title {
   color: var(--blue);
+}
+.step-list button[aria-current="step"]::after {
+  background: var(--blue);
+}
+.is-complete .step-index {
+  color: var(--success);
+  border-color: #cce3d9;
+  background: #edf7f2;
+}
+.is-complete .step-status {
+  color: var(--success);
+}
+.is-complete button::after {
+  background: var(--success);
+}
+.step-list .is-complete button[aria-current="step"] {
+  background: #f3f9f6;
+}
+.step-list .is-complete [aria-current="step"] .step-index {
+  color: #fff;
+  border-color: var(--success);
+  background: var(--success);
+}
+.step-list .is-complete [aria-current="step"] .step-title {
+  color: var(--ink);
+}
+.step-list .is-complete button[aria-current="step"]::after {
+  background: var(--success);
+}
+.step-list button:hover:not(:disabled):not([aria-current]) {
+  background: var(--tint);
 }
 .step-list button:disabled {
   cursor: default;
@@ -1135,12 +1164,18 @@ input::placeholder {
     padding-top: 16px;
   }
   .step-list {
-    gap: 18px;
-    justify-content: space-between;
+    gap: 5px;
   }
   .step-list button {
-    font-size: 11px;
-    gap: 7px;
+    gap: 8px;
+    padding: 10px 9px 14px;
+  }
+  .step-list button::after {
+    left: 9px;
+    right: 9px;
+  }
+  .step-title {
+    font-size: 12px;
   }
   .page-heading {
     padding-top: 25px;
@@ -1174,19 +1209,30 @@ input::placeholder {
     padding: 18px 16px;
   }
   .step-list {
-    gap: 10px;
+    gap: 4px;
+    padding: 5px;
   }
   .step-list button {
-    gap: 6px;
+    min-height: 87px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    padding: 8px 6px 12px;
+  }
+  .step-list button::after {
+    left: 6px;
+    right: 6px;
+  }
+  .step-title {
+    font-size: 11px;
+  }
+  .step-status {
     font-size: 10px;
   }
   .step-index {
-    width: 20px;
-    height: 20px;
-    flex-basis: 20px;
-    font-size: 10px;
-  }
-  .workflow-status {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
     font-size: 11px;
   }
   .project-summary {

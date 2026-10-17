@@ -176,16 +176,8 @@ export default function App() {
 
       <main id="main-content" className="app-layout">
         <nav className="workflow" aria-label="Этапы подготовки">
-          <div className="workflow-status">
-            <span>
-              {packageDownloaded ? "Пакет подготовлен" : "Подготовка проекта"}
-            </span>
-            <span>
-              Завершено {completedSteps} из {steps.length}
-            </span>
-          </div>
           <progress
-            className="workflow-progress"
+            className="sr-only"
             max={steps.length}
             value={completedSteps}
             aria-label="Прогресс подготовки пакета"
@@ -207,11 +199,23 @@ export default function App() {
                   onClick={() => changeStep(index)}
                 >
                   <span className="step-index" aria-hidden="true">
-                    {index < completedSteps ? "✓" : index + 1}
+                    {index < completedSteps ? (
+                      <svg viewBox="0 0 20 20" fill="none">
+                        <path d="m5 10 3.5 3.5L15 7" />
+                      </svg>
+                    ) : (
+                      index + 1
+                    )}
                   </span>
-                  {title}
-                  <span className="sr-only">
-                    {index < completedSteps ? ", завершён" : ""}
+                  <span className="step-copy">
+                    <span className="step-title">{title}</span>
+                    <span className="step-status">
+                      {index < completedSteps
+                        ? "Готово"
+                        : step === index
+                          ? "Сейчас"
+                          : "Далее"}
+                    </span>
                   </span>
                 </button>
               </li>

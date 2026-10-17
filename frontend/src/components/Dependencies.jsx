@@ -152,25 +152,6 @@ function DependencyRow({
                   onChange(module, "version", event.target.value)
                 }
               />
-              {dependency.environment_version && (
-                <div className="environment-version">
-                  <span>У автора: {dependency.environment_version}</span>
-                  {!dependency.version && (
-                    <button
-                      className="text-button"
-                      onClick={() =>
-                        onChange(
-                          module,
-                          "version",
-                          dependency.environment_version,
-                        )
-                      }
-                    >
-                      Подставить версию
-                    </button>
-                  )}
-                </div>
-              )}
             </td>
           </>
         ) : (
@@ -194,13 +175,6 @@ function DependencyRow({
                 </li>
               ))}
             </ul>
-            {dependency.environment_version && (
-              <p>
-                В отчёте исходной среды:{" "}
-                <code>{dependency.environment_version}</code>. Совместимость не
-                проверена.
-              </p>
-            )}
           </td>
         </tr>
       )}
@@ -268,9 +242,6 @@ export default function Dependencies({
           Требование к Python: {analysis.python_requirement || "не указано"}
         </strong>
         <p>{analysis.python_source}</p>
-        {analysis.environment_summary && (
-          <p>Среда автора: {analysis.environment_summary}</p>
-        )}
       </div>
       {dependencies.some(
         (dependency) =>
@@ -278,9 +249,9 @@ export default function Dependencies({
           !dependency.version,
       ) && (
         <p className="version-note">
-          Для части библиотек нет версий в файлах проекта и отчёте среды. По
-          импорту их узнать нельзя. Приложите lock-файл или список версий из
-          рабочего окружения; иначе pip выберет версии при установке.
+          Для части библиотек нет версий в файлах проекта. По импорту их узнать
+          нельзя. Добавьте lock-файл или укажите известную версию в таблице;
+          иначе pip выберет версии при установке.
         </p>
       )}
       {unresolved > 0 && (

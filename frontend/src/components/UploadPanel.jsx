@@ -314,7 +314,8 @@ export default function UploadPanel({
             </code>
             <p>
               Прикрепите созданный <code>environment-report.json</code> — это
-              текстовый список версий. Этот шаг можно пропустить.
+              текстовый список версий. Они попадут в requirements, если не
+              конфликтуют с файлами проекта. Этот шаг можно пропустить.
             </p>
             <label className="file-picker button">
               <span>Прикрепить список версий</span>

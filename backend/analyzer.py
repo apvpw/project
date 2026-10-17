@@ -7,8 +7,17 @@ import shlex
 import sys
 from pathlib import PurePosixPath
 
+from packaging.version import Version
+
 from backend.archive import decode_python
-from backend.dependencies import STACKS, known_package, normalize, read_manifests
+from backend.dependencies import (
+    STACKS,
+    apply_recorded_versions,
+    known_package,
+    normalize,
+    read_locked_versions,
+    read_manifests,
+)
 from backend.models import Analysis, Dependency, EntryPoint, Evidence, Warning
 
 DATA_SUFFIXES = {".csv", ".tsv", ".json", ".txt", ".xlsx", ".parquet", ".npy", ".npz"}
@@ -67,6 +76,7 @@ def read_environment(
                 or not re.fullmatch(r"[A-Za-z0-9.!+_-]{1,80}", version)
             ):
                 raise ValueError
+            Version(version)
             clean[normalize(name)] = version
         imports = report.get("imports", {})
         if not isinstance(imports, dict) or len(imports) > 5000:
@@ -89,7 +99,7 @@ def read_environment(
         )
     except (ValueError, KeyError, TypeError, AttributeError, RecursionError) as error:
         raise ValueError(
-            "Не удалось прочитать отчёт с версиями. Скачайте скрипт в разделе «Версии с компьютера автора» и загрузите созданный environment-report.json."
+            "Не удалось прочитать отчёт с версиями. Скачайте скрипт в разделе «Версии среды» и загрузите созданный environment-report.json."
         ) from error
 
 
@@ -383,6 +393,7 @@ def analyze(
     environment: bytes | None = None,
 ) -> Analysis:
     declared, python, python_source, conda, warnings = read_manifests(files)
+    locked = read_locked_versions(files, warnings)
     environment_packages, environment_imports, environment_summary = read_environment(
         environment
     )
@@ -449,6 +460,7 @@ def analyze(
                 if normalize(item["package"].split("[")[0]) in names
             ]
             matches.sort(key=lambda pair: pair[1]["optional"])
+            locked_names = sorted(names & locked.keys())
             distributions = {
                 normalize(item["package"].split("[")[0]) for _, item in matches
             }
@@ -488,6 +500,18 @@ def analyze(
                             message=f"Для {package} найдены разные ограничения версии. Основная группа имеет приоритет; проверьте остальные записи.",
                         )
                     )
+            elif len(locked_names) > 1:
+                kind, source = (
+                    "unknown",
+                    "В lock-файлах несколько вариантов пакета: "
+                    + ", ".join(locked_names),
+                )
+            elif locked_names:
+                package, kind, source = (
+                    locked_names[0],
+                    "external",
+                    "Соответствие имени пакету из lock-файла",
+                )
             elif len(environment_names) == 1:
                 package, kind, source = (
                     environment_names[0],
@@ -628,6 +652,10 @@ def analyze(
                 "pyproject.toml",
                 "environment.yml",
                 "environment.yaml",
+                "uv.lock",
+                "poetry.lock",
+                "pdm.lock",
+                "pipfile.lock",
             }
             for n in basenames
         ),
@@ -655,19 +683,12 @@ def analyze(
             message="Анализ статический и неполный: плагины, системные библиотеки, сетевые данные и скрытые настройки могут потребовать ручной проверки.",
         )
     )
-    if any(d.kind == "external" and not d.version for d in imported.values()):
-        warnings.append(
-            Warning(
-                code="unknown_versions",
-                message="Часть версий неизвестна. requirements будет черновиком, а не зафиксированным окружением.",
-            )
-        )
     if environment_summary:
         warnings.append(
             Warning(
                 code="environment_report",
                 level="info",
-                message="Получен добровольно загруженный отчёт среды. Его версии показаны справочно и не подставлены автоматически.",
+                message="Получен отчёт среды автора. Его версии подставлены, если они не конфликтуют с файлами проекта. Запуск и совместимость не проверялись.",
             )
         )
     # Один и тот же импорт в разных подпапках может разрешаться по-разному.
@@ -690,6 +711,16 @@ def analyze(
             )
         else:
             dependencies[dependency.module] = dependency
+    apply_recorded_versions(
+        dependencies.values(), locked, environment_packages, warnings
+    )
+    if any(d.kind == "external" and not d.version for d in dependencies.values()):
+        warnings.append(
+            Warning(
+                code="unknown_versions",
+                message="В файлах проекта и отчёте среды нет версий для части библиотек. По импортам их определить нельзя; pip выберет версии при установке.",
+            )
+        )
     # Повторные совпадения одного признака не превращаем в десятки одинаковых сообщений.
     unique = {(w.code, w.file, w.line, w.message): w for w in warnings}
     return Analysis(

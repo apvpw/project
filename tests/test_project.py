@@ -127,7 +127,7 @@ class AnalysisTests(unittest.TestCase):
         dep = result.dependencies[0]
         self.assertEqual(
             (dep.kind, dep.package, dep.environment_version, dep.version),
-            ("external", "research-widget-sdk", "1.2.3", ""),
+            ("external", "research-widget-sdk", "1.2.3", "==1.2.3"),
         )
 
     def test_author_metadata_recognizes_an_alternative_distribution(self):
@@ -287,13 +287,179 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(result.python_requirement, ">=3.10")
         self.assertIn("синтаксис", result.python_source)
 
-    def test_environment_report_is_evidence_not_a_pin(self):
+    def test_author_environment_supplies_an_exact_version(self):
         environment = json.dumps(
             {"python_version": "3.12.1", "packages": {"pandas": "2.2.3"}}
         ).encode()
         dependency = inspect({"main.py": b"import pandas"}, environment).dependencies[0]
         self.assertEqual(dependency.environment_version, "2.2.3")
-        self.assertEqual(dependency.version, "")
+        self.assertEqual(dependency.version, "==2.2.3")
+        self.assertIn("отчёта среды автора", dependency.source)
+
+    def test_lock_formats_supply_versions_without_adding_unused_packages(self):
+        toml = b'[[package]]\nname = "pandas"\nversion = "2.2.3"\n'
+        extra = b'[[package]]\nname = "pytest"\nversion = "8.3.0"\n'
+        locks = {
+            "uv.lock": toml
+            + b'source = { registry = "https://pypi.org/simple" }\n'
+            + extra
+            + b'source = { registry = "https://pypi.org/simple" }\n',
+            "poetry.lock": toml + extra,
+            "pdm.lock": toml + extra,
+            "Pipfile.lock": json.dumps(
+                {
+                    "default": {"pandas": {"version": "==2.2.3"}},
+                    "develop": {"pytest": {"version": "==8.3.0"}},
+                }
+            ).encode(),
+        }
+        for name, data in locks.items():
+            with self.subTest(lock=name):
+                files = {"main.py": b"import pandas", name: data}
+                result = inspect(files)
+                self.assertEqual(len(result.dependencies), 1)
+                self.assertEqual(result.dependencies[0].version, "==2.2.3")
+                self.assertIn(name, result.dependencies[0].source)
+                requirements = generate(files, result, options(result))[
+                    "requirements.txt"
+                ]
+                self.assertIn("pandas==2.2.3\n", requirements)
+                self.assertNotIn("pytest", requirements)
+                self.assertFalse(
+                    any(w.code == "unknown_versions" for w in result.warnings)
+                )
+
+    def test_lock_refines_a_range_and_preserves_extras_and_markers(self):
+        files = {
+            "main.py": b"import requests",
+            "requirements.txt": b'requests[socks]>=2; python_version >= "3.10"',
+            "poetry.lock": b'[[package]]\nname = "requests"\nversion = "2.32.3"',
+        }
+        result = inspect(files)
+        requirements = generate(files, result, options(result))["requirements.txt"]
+        self.assertIn('requests[socks]==2.32.3; python_version >= "3.10"', requirements)
+
+    def test_conflicting_lock_keeps_the_manifest_constraint(self):
+        result = inspect(
+            {
+                "main.py": b"import pandas",
+                "requirements.txt": b"pandas<2",
+                "poetry.lock": b'[[package]]\nname = "pandas"\nversion = "2.2.3"',
+            }
+        )
+        self.assertEqual(result.dependencies[0].version, "<2")
+        self.assertTrue(any(w.code == "lock_conflict" for w in result.warnings))
+
+    def test_platform_variants_and_different_lock_versions_are_not_guessed(self):
+        result = inspect(
+            {
+                "main.py": b"import pandas",
+                "poetry.lock": b'[[package]]\nname = "pandas"\nversion = "2.2.2"\n[[package]]\nname = "pandas"\nversion = "2.2.3"',
+            }
+        )
+        self.assertEqual(result.dependencies[0].version, "")
+        self.assertTrue(any(w.code == "lock_ambiguous" for w in result.warnings))
+
+    def test_author_environment_does_not_override_a_conflicting_lock(self):
+        report = json.dumps(
+            {"python_version": "3.12.1", "packages": {"pandas": "1.5.3"}}
+        ).encode()
+        result = inspect(
+            {
+                "main.py": b"import pandas",
+                "poetry.lock": b'[[package]]\nname = "pandas"\nversion = "2.2.3"',
+            },
+            report,
+        )
+        self.assertEqual(result.dependencies[0].version, "==2.2.3")
+        self.assertTrue(
+            any(w.code == "environment_version_conflict" for w in result.warnings)
+        )
+
+    def test_git_and_local_lock_sources_are_not_exported_as_pypi_pins(self):
+        for name, source in (
+            ("uv.lock", 'source = { git = "https://example.com/repo" }'),
+            (
+                "poetry.lock",
+                '[package.source]\ntype = "git"\nurl = "https://example.com/repo"',
+            ),
+        ):
+            with self.subTest(lock=name):
+                result = inspect(
+                    {
+                        "main.py": b"import pandas",
+                        name: (
+                            '[[package]]\nname = "pandas"\nversion = "2.2.3"\n' + source
+                        ).encode(),
+                    }
+                )
+                self.assertEqual(result.dependencies[0].version, "")
+                self.assertTrue(any(w.code == "lock_source" for w in result.warnings))
+
+    def test_invalid_lock_is_reported_without_rejecting_the_project(self):
+        for name, data in (
+            ("uv.lock", b"[[package]"),
+            ("Pipfile.lock", b'{"default": []}'),
+            ("pdm.lock", b'[[package]]\nname = "pandas"\nversion = "nonsense"'),
+        ):
+            with self.subTest(lock=name):
+                result = inspect({"main.py": b"import pandas", name: data})
+                self.assertEqual(result.dependencies[0].version, "")
+                self.assertTrue(any(w.code == "lock_parse" for w in result.warnings))
+
+    def test_invalid_author_version_is_rejected(self):
+        report = json.dumps(
+            {"python_version": "3.12.1", "packages": {"pandas": "nonsense"}}
+        ).encode()
+        with self.assertRaises(ValueError):
+            inspect({"main.py": b"import pandas"}, report)
+
+    def test_author_version_refines_a_compatible_manifest_range(self):
+        report = json.dumps(
+            {"python_version": "3.12.1", "packages": {"requests": "2.32.3"}}
+        ).encode()
+        result = inspect(
+            {
+                "main.py": b"import requests",
+                "requirements.txt": b'requests[socks]>=2; python_version >= "3.10"',
+            },
+            report,
+        )
+        self.assertEqual(
+            result.dependencies[0].version, '==2.32.3; python_version >= "3.10"'
+        )
+
+    def test_author_version_does_not_override_an_incompatible_manifest(self):
+        report = json.dumps(
+            {"python_version": "3.12.1", "packages": {"pandas": "1.5.3"}}
+        ).encode()
+        result = inspect(
+            {"main.py": b"import pandas", "requirements.txt": b"pandas>=2"}, report
+        )
+        self.assertEqual(result.dependencies[0].version, ">=2")
+        self.assertTrue(
+            any(w.code == "environment_version_conflict" for w in result.warnings)
+        )
+
+    def test_private_indexes_are_not_silently_replaced_with_pypi(self):
+        locks = {
+            "uv.lock": b'[[package]]\nname = "pandas"\nversion = "2.2.3"\nsource = { registry = "https://example.com/simple" }',
+            "Pipfile.lock": json.dumps(
+                {
+                    "_meta": {
+                        "sources": [
+                            {"name": "private", "url": "https://example.com/simple"}
+                        ]
+                    },
+                    "default": {"pandas": {"version": "==2.2.3", "index": "private"}},
+                }
+            ).encode(),
+        }
+        for name, data in locks.items():
+            with self.subTest(lock=name):
+                result = inspect({"main.py": b"import pandas", name: data})
+                self.assertEqual(result.dependencies[0].version, "")
+                self.assertTrue(any(w.code == "lock_source" for w in result.warnings))
 
     def test_missing_data_is_reported(self):
         result = inspect({"main.py": b"import pandas as pd\npd.read_csv('absent.csv')"})

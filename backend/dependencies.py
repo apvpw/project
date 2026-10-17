@@ -1,13 +1,15 @@
 """Сопоставление импортов пакетам и чтение заявленных зависимостей."""
 
+import json
 import re
 import tomllib
 
 import yaml
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import Version
 
-from backend.models import Warning
+from backend.models import Evidence, Warning
 
 # Пакеты с одинаковыми именами импорта и дистрибутива.
 PACKAGES = {
@@ -276,6 +278,150 @@ def requirement_parts(text: str) -> tuple[str, str]:
     extras = f"[{','.join(sorted(requirement.extras))}]" if requirement.extras else ""
     marker = f"; {requirement.marker}" if requirement.marker else ""
     return requirement.name + extras, str(requirement.specifier) + marker
+
+
+def read_locked_versions(files, warnings):
+    locked = {}
+    for path, data in sorted(files.items()):
+        basename = path.rsplit("/", 1)[-1].lower()
+        if basename not in {"uv.lock", "poetry.lock", "pdm.lock", "pipfile.lock"}:
+            continue
+        try:
+            text = data.decode("utf-8-sig")
+            if basename == "pipfile.lock":
+                document = json.loads(text)
+                sources = {
+                    entry["name"]: entry["url"].rstrip("/")
+                    for entry in document.get("_meta", {}).get("sources", [])
+                }
+                packages = []
+                for group in ("default", "develop"):
+                    for name, item in document.get(group, {}).items():
+                        index = item.get("index")
+                        separate_index = (
+                            sources.get(index) != "https://pypi.org/simple"
+                            if index
+                            else any(
+                                url != "https://pypi.org/simple"
+                                for url in sources.values()
+                            )
+                        )
+                        packages.append(
+                            {
+                                **item,
+                                "name": name,
+                                "source": {"index": index} if separate_index else {},
+                            }
+                        )
+            else:
+                packages = tomllib.loads(text).get("package", [])
+            if not isinstance(packages, list):
+                raise ValueError("Ожидался список пакетов")
+            for item in packages:
+                name = item["name"]
+                if not isinstance(name, str) or not re.fullmatch(
+                    r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", name
+                ):
+                    raise ValueError("Недопустимое имя пакета")
+                source = item.get("source", {})
+                if basename == "uv.lock" and "virtual" in source:
+                    continue
+                if (
+                    any(
+                        key in item
+                        for key in ("git", "path", "file", "url", "editable")
+                    )
+                    or (
+                        basename == "uv.lock"
+                        and source.get("registry", "").rstrip("/")
+                        != "https://pypi.org/simple"
+                    )
+                    or (basename != "uv.lock" and source)
+                ):
+                    warnings.append(
+                        Warning(
+                            code="lock_source",
+                            file=path,
+                            message=f"Для {name} в lock-файле указан отдельный источник. Его нельзя заменить обычной установкой из PyPI; проверьте исходный файл.",
+                        )
+                    )
+                    continue
+                version = item["version"]
+                if basename == "pipfile.lock":
+                    if not isinstance(version, str) or not version.startswith("=="):
+                        raise ValueError("Нужна точная версия")
+                    version = version[2:]
+                if not isinstance(version, str) or len(version) > 80:
+                    raise ValueError("Недопустимая версия")
+                Version(version)
+                locked.setdefault(normalize(name), []).append((version, path))
+        except (
+            UnicodeDecodeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            AttributeError,
+            RecursionError,
+        ):
+            warnings.append(
+                Warning(
+                    code="lock_parse",
+                    file=path,
+                    message="Lock-файл прочитан не полностью. Поддерживаются записи пакетов с точными версиями; проверьте оригинал.",
+                )
+            )
+    return locked
+
+
+def apply_recorded_versions(dependencies, locked, environment, warnings):
+    for dependency in dependencies:
+        if dependency.kind != "external" or not dependency.package:
+            continue
+        requirement = Requirement(dependency.package + dependency.version)
+        name = normalize(requirement.name)
+        entries = locked.get(name, [])
+        versions = {version for version, _ in entries}
+        if len(versions) > 1:
+            warnings.append(
+                Warning(
+                    code="lock_ambiguous",
+                    file=entries[0][1],
+                    message=f"Для {requirement.name} в lock-файлах несколько версий. Они могут относиться к разным средам; версия автоматически не выбрана.",
+                )
+            )
+        elif versions:
+            version = next(iter(versions))
+            if not requirement.specifier.contains(version, prereleases=True):
+                warnings.append(
+                    Warning(
+                        code="lock_conflict",
+                        file=entries[0][1],
+                        message=f"Версия {requirement.name}=={version} из lock-файла не соответствует {requirement.specifier}. Ограничение проекта сохранено.",
+                    )
+                )
+            else:
+                marker = f"; {requirement.marker}" if requirement.marker else ""
+                dependency.version = "==" + version + marker
+                dependency.source += f". Точная версия из {entries[0][1]}"
+                dependency.evidence.append(
+                    Evidence(file=entries[0][1], detail="Зафиксированная версия пакета")
+                )
+
+        author_version = environment.get(name)
+        if not author_version:
+            continue
+        current = Requirement(dependency.package + dependency.version)
+        if not current.specifier.contains(author_version, prereleases=True):
+            warnings.append(
+                Warning(
+                    code="environment_version_conflict",
+                    message=f"У автора установлен {requirement.name}=={author_version}, что не соответствует {current.specifier}. Версия проекта сохранена.",
+                )
+            )
+        elif not entries:
+            marker = f"; {current.marker}" if current.marker else ""
+            dependency.version = "==" + author_version + marker
+            dependency.source += ". Точная версия из отчёта среды автора"
 
 
 def read_manifests(

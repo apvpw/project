@@ -1,0 +1,8 @@
+[project]
+name = "sales-example"
+version = "0.1.0"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "numpy>=2.5,<3",
+    "pandas>=3,<4",
+]

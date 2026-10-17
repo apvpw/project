@@ -105,17 +105,18 @@ def file_tree(paths):
 
 def requirements_text(dependencies: list[Dependency]) -> str:
     lines = [
-        "# Черновик зависимостей, подготовленный статическим анализом.",
-        "# Неизвестные версии не закреплены. Совместимость требует проверки.",
+        "# Зависимости проекта. Источники версий и замечания — в REPORT.md.",
     ]
+    if any(not d.version or not d.package for d in dependencies):
+        lines.append(
+            "# Часть версий или пакетов не указана в исходных данных. См. REPORT.md."
+        )
     seen: set[str] = set()
     for dependency in dependencies:
         if dependency.package:
             line = dependency.package + dependency.version
             key = normalize(dependency.package) + dependency.version
             if key not in seen:
-                if not dependency.version:
-                    lines.append(f"# {dependency.package}: версия неизвестна")
                 lines.append(line)
                 seen.add(key)
         else:
@@ -237,7 +238,8 @@ def report_text(analysis, options, dependencies, suspected) -> str:
         "",
         f"Синтаксический анализ выполнен Python {sys.version.split()[0]}. Загрузка исходников не приводит к их импорту или запуску.",
         "Стандартные модули определяются по каталогу этой версии Python. Для другой версии состав может отличаться.",
-        "Внешние зависимости определены по импортам, файлам зависимостей и каталогу соответствий. Уточнения пользователя и предоставленные сведения о среде учитываются при сборке пакета.",
+        "Внешние зависимости определены по импортам, файлам зависимостей и каталогу соответствий. Точные версии берутся из lock-файлов или предоставленного отчёта среды, если нет конфликтов. Уточнения пользователя учитываются при сборке пакета.",
+        "Транзитивные зависимости не разрешались: сохранённые lock-файлы не заменяются полным экспортом окружения. Установка и совместимость требуют отдельной проверки.",
         "Отсутствие предупреждений не доказывает полноту зависимостей и безопасность кода.",
         "",
         "## Зависимости",
@@ -266,7 +268,7 @@ def report_text(analysis, options, dependencies, suspected) -> str:
         for dependency in dependencies:
             if dependency.environment_version:
                 report_lines.append(
-                    f"- {dependency.package or dependency.module}: {dependency.environment_version} в предоставленном отчёте; автоматически не закреплена."
+                    f"- {dependency.package or dependency.module}: {dependency.environment_version} в предоставленном отчёте. В requirements: {dependency.version or 'не закреплена'}; основание выбора указано выше."
                 )
     if analysis.conda_dependencies:
         report_lines.extend(["", "## Исходные Conda-зависимости", ""])

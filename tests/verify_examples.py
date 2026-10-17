@@ -10,10 +10,9 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from backend.analyzer import analyze
-from backend.archive import read_uploads
-from backend.generator import build_zip, generate
-from backend.models import PackageOptions
+from fastapi.testclient import TestClient
+
+from backend.main import app
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = ("data_analysis", "local_modules")
@@ -39,22 +38,32 @@ def verify(name):
         and "__pycache__" not in path.parts
         and path.name != "result.csv"
     }
-    demo_zip = io.BytesIO()
-    with zipfile.ZipFile(demo_zip, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path, content in original.items():
-            archive.writestr(f"{name}/{path}", content)
-    files, _ = read_uploads([(f"{name}.zip", demo_zip.getvalue())])
-    result = analyze(files, name, name)
-    settings = PackageOptions(
-        dependencies=result.dependencies,
-        command="python main.py",
-        python_version=f"3.{sys.version_info.minor}",
-    )
-    generated = generate(files, result, settings)
-    package = build_zip(files, generated, settings)
+    input_zip = ROOT / "examples" / "archives" / f"{name}.zip"
+    with TestClient(app) as client:
+        analysis_response = client.post(
+            "/api/analyze", files=[("files", (input_zip.name, input_zip.read_bytes()))]
+        )
+        analysis_response.raise_for_status()
+        analysis = analysis_response.json()
+        response = client.post(
+            "/api/package",
+            json={
+                "analysis_id": analysis["id"],
+                "dependencies": analysis["dependencies"],
+                "command": "python main.py",
+                "python_version": f"3.{sys.version_info.minor}",
+                "docker": False,
+            },
+        )
+        response.raise_for_status()
+        package = response.content
+        client.delete(f"/api/projects/{analysis['id']}")
     with tempfile.TemporaryDirectory(prefix=f"perenos-{name}-") as temporary:
         folder = Path(temporary)
         with zipfile.ZipFile(io.BytesIO(package)) as archive:
+            for path, content in original.items():
+                assert archive.read(path) == content, f"Исходник изменился: {path}"
+            requirements = archive.read("requirements.txt").decode("utf-8")
             # В архиве только известные файлы двух наших примеров.
             archive.extractall(folder)
         venv.EnvBuilder(with_pip=True).create(folder / ".venv")
@@ -73,13 +82,24 @@ def verify(name):
             assert "Выручка: 1500.00" in output, output
             assert "Средняя выручка на строку: 375.00" in output, output
             assert (folder / "result.csv").exists()
+            assert "numpy==" in requirements and "pandas==" in requirements
+            for line in requirements.splitlines():
+                if line and not line.startswith("#"):
+                    assert line in frozen.splitlines(), frozen
         else:
             assert "Всего слов: 19" in output, output
-            assert "helpers" not in generated["requirements.txt"]
+            assert "helpers" not in requirements
         return f"""## {name}
 
 Результат: **успешно**, отдельное чистое venv.
-Пакет получен через тот же анализатор и генератор, что используются HTTP API.
+Входной архив: `examples/archives/{name}.zip`.
+Пакет получен через `/api/analyze` и `/api/package`, без ручного редактирования зависимостей.
+
+Полученный `requirements.txt`:
+
+```text
+{requirements.strip()}
+```
 
 Установка: `python -m pip install -r requirements.txt`.
 Запуск: `python main.py` из корня распакованного пакета.

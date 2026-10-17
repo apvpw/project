@@ -52,7 +52,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(dependencies["app"].kind, "local")
         self.assertTrue(any(w.code == "shadowing" for w in result.warnings))
         requirements = generate(files, result, options(result))["requirements.txt"]
-        self.assertNotIn("УТОЧНИТЬ", requirements)
+        self.assertEqual(requirements, "")
 
     def test_root_shadow_and_explicit_relative_import_remain_local(self):
         result = inspect({"main.py": b"import logging", "logging.py": b"pass"})
@@ -212,10 +212,9 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(len(result.dependencies), 1)
         self.assertEqual(result.dependencies[0].kind, "unknown")
         self.assertEqual(len(result.dependencies[0].evidence), 2)
-        self.assertIn(
-            "УТОЧНИТЬ",
-            generate(files, result, options(result))["requirements.txt"],
-        )
+        generated = generate(files, result, options(result))
+        self.assertEqual(generated["requirements.txt"], "")
+        self.assertIn("Импорт разрешается по-разному", generated["REPORT.md"])
 
     def test_relative_import_and_src_layout(self):
         result = inspect(
@@ -495,8 +494,10 @@ class RegistryTests(unittest.IsolatedAsyncioTestCase):
         files = {"main.py": b"import emoji"}
         result = inspect(files)
         self.assertEqual(result.dependencies[0].package, "")
-        requirements = generate(files, result, options(result))["requirements.txt"]
-        self.assertIn("УТОЧНИТЬ", requirements)
+        generated = generate(files, result, options(result))
+        requirements = generated["requirements.txt"]
+        self.assertEqual(requirements, "")
+        self.assertIn("emoji", generated["REPORT.md"])
         self.assertNotIn("999.0", requirements)
 
     async def test_unknown_package_and_network_failure_are_distinct(self):
@@ -716,17 +717,14 @@ class GenerationTests(unittest.TestCase):
         self.assertIn("input.csv", readme)
         self.assertIn("helper.py", readme)
 
-    def test_unknown_dependency_is_a_comment_and_local_is_not_installed(self):
+    def test_unknown_dependency_is_reported_and_local_is_not_installed(self):
         files = {"main.py": b"import mystery\nimport helpers", "helpers.py": b"pass"}
         result = inspect(files)
-        requirements = generate(files, result, options(result))["requirements.txt"]
-        install_lines = [
-            line
-            for line in requirements.splitlines()
-            if line and not line.startswith("#")
-        ]
-        self.assertEqual(install_lines, [])
-        self.assertIn("mystery", requirements)
+        generated = generate(files, result, options(result))
+        requirements = generated["requirements.txt"]
+        self.assertEqual(requirements, "")
+        self.assertIn("mystery", generated["REPORT.md"])
+        self.assertIn("Не определены пакеты", generated["README.md"])
         self.assertNotIn("helpers", requirements)
 
     def test_manual_package_and_version_are_used(self):

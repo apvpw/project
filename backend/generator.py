@@ -104,13 +104,7 @@ def file_tree(paths):
 
 
 def requirements_text(dependencies: list[Dependency]) -> str:
-    lines = [
-        "# Зависимости проекта. Источники версий и замечания — в REPORT.md.",
-    ]
-    if any(not d.version or not d.package for d in dependencies):
-        lines.append(
-            "# Часть версий или пакетов не указана в исходных данных. См. REPORT.md."
-        )
+    lines = []
     seen: set[str] = set()
     for dependency in dependencies:
         if dependency.package:
@@ -119,11 +113,7 @@ def requirements_text(dependencies: list[Dependency]) -> str:
             if key not in seen:
                 lines.append(line)
                 seen.add(key)
-        else:
-            lines.append(f"# УТОЧНИТЬ: импорт {dependency.module}; пакет не определён")
-    requirements = "\n".join(lines) + "\n"
-
-    return requirements
+    return "\n".join(lines) + ("\n" if lines else "")
 
 
 def readme_text(analysis, options, sources, generated_names, unresolved) -> str:

@@ -591,49 +591,9 @@ code {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-.environment-input {
-  margin-top: 0;
-  font-size: 12px;
-  color: var(--muted);
-}
-.environment-input > summary {
-  width: 100%;
-  color: var(--ink);
-  font-size: 12px;
-}
-.environment-input > summary > span {
-  font-size: 10px;
-  color: var(--muted);
-  margin-left: 6px;
-}
-.environment-command {
-  display: block;
-  background: var(--tint);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 9px;
-  font-size: 10px;
-}
-.environment-input .file-picker {
-  width: 100%;
-  font-size: 11px;
-  padding: 10px;
-}
 summary {
   cursor: pointer;
   width: fit-content;
-}
-.environment-input p {
-  margin: 12px 0;
-  max-width: 75ch;
-  line-height: 1.8;
-}
-.inline-file {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  margin-top: 8px;
-  overflow-wrap: anywhere;
 }
 .panel-actions {
   display: flex;
@@ -789,8 +749,7 @@ input::placeholder {
   margin-top: 4px;
   overflow-wrap: anywhere;
 }
-.package-suggestion a,
-.environment-input a {
+.package-suggestion a {
   color: var(--blue);
   text-underline-offset: 3px;
 }

@@ -9,7 +9,6 @@ const steps = ["Загрузка", "Зависимости", "Скачивани
 export default function App() {
   const [step, setStep] = useState(0);
   const [files, setFiles] = useState([]);
-  const [environment, setEnvironment] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [dependencies, setDependencies] = useState([]);
   const [dependenciesReviewed, setDependenciesReviewed] = useState(false);
@@ -31,9 +30,7 @@ export default function App() {
   const help = useRef(null);
   const analyzedInput = useRef(null);
   const analysisReady =
-    analysis &&
-    analyzedInput.current?.files === files &&
-    analyzedInput.current?.environment === environment;
+    analysis && analyzedInput.current?.files === files;
 
   // Стабильный объект не даёт предпросмотру перезапрашиваться при смене шага.
   const options = useMemo(
@@ -62,7 +59,7 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
-      const result = await analyzeProject(files, environment);
+      const result = await analyzeProject(files);
       if (analysis) {
         try {
           await deleteProject(analysis.id);
@@ -74,7 +71,7 @@ export default function App() {
         }
       }
       setAnalysis(result);
-      analyzedInput.current = { files, environment };
+      analyzedInput.current = { files };
       setDependencies(result.dependencies);
       setDependenciesReviewed(false);
       setDownloadedOptions(null);
@@ -118,7 +115,6 @@ export default function App() {
       setDownloadedOptions(null);
       setPackageSearch({ pending: false, results: {}, error: "" });
       setFiles([]);
-      setEnvironment(null);
       setStep(0);
     } catch (error) {
       setError(error.message);
@@ -263,8 +259,6 @@ export default function App() {
             <UploadPanel
               files={files}
               setFiles={setFiles}
-              environment={environment}
-              setEnvironment={setEnvironment}
               busy={busy}
               onAnalyze={analyze}
               onError={setError}

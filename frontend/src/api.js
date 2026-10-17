@@ -27,12 +27,11 @@ async function request(path, options) {
   throw new Error(message);
 }
 
-async function upload(path, files, environment) {
+async function upload(path, files) {
   const form = new FormData();
   for (const file of files) {
     form.append("files", file, file.webkitRelativePath || file.name);
   }
-  if (environment) form.append("environment", environment);
   const response = await request(path, {
     method: "POST",
     body: form,
@@ -44,8 +43,8 @@ export function inspectProject(files) {
   return upload("/api/inspect", files);
 }
 
-export function analyzeProject(files, environment) {
-  return upload("/api/analyze", files, environment);
+export function analyzeProject(files) {
+  return upload("/api/analyze", files);
 }
 
 export async function findPackages(analysisId) {

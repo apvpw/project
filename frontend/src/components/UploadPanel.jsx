@@ -26,8 +26,6 @@ function sizeLabel(bytes) {
 export default function UploadPanel({
   files,
   setFiles,
-  environment,
-  setEnvironment,
   busy,
   onAnalyze,
   onError,
@@ -129,11 +127,6 @@ export default function UploadPanel({
     if (!event.currentTarget.contains(event.relatedTarget)) {
       setDragging(false);
     }
-  }
-
-  function chooseEnvironment(event) {
-    setEnvironment(event.target.files[0] || null);
-    event.target.value = "";
   }
 
   const pickers = (
@@ -296,50 +289,6 @@ export default function UploadPanel({
             </div>
           </dl>
 
-          <details className="environment-input">
-            <summary>
-              Версии среды{" "}
-              <span>{environment ? "Прикреплены" : "Необязательно"}</span>
-            </summary>
-            <p>
-              Если проект работает у автора, можно приложить список
-              установленных версий Python и библиотек.
-            </p>
-            <a href="/api/environment-script" download="environment_report.py">
-              Скачать скрипт
-            </a>
-            <p>Запустите его в рабочем окружении проекта:</p>
-            <code className="environment-command">
-              python environment_report.py
-            </code>
-            <p>
-              Прикрепите созданный <code>environment-report.json</code> — это
-              текстовый список версий. Они попадут в requirements, если не
-              конфликтуют с файлами проекта. Этот шаг можно пропустить.
-            </p>
-            <label className="file-picker button">
-              <span>Прикрепить список версий</span>
-              <input
-                type="file"
-                name="environment"
-                accept=".json"
-                disabled={busy}
-                onChange={chooseEnvironment}
-              />
-            </label>
-            {environment && (
-              <div className="inline-file">
-                <span>{environment.name}</span>
-                <button
-                  className="text-button"
-                  disabled={busy}
-                  onClick={() => setEnvironment(null)}
-                >
-                  Убрать отчёт
-                </button>
-              </div>
-            )}
-          </details>
           <p className="processing-note">
             Загрузка хранится до 30 минут. В PyPI проверяются только неизвестные
             имена импортов; исходники туда не отправляются.

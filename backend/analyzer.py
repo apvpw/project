@@ -8,7 +8,7 @@ import sys
 from pathlib import PurePosixPath
 
 from backend.archive import decode_python
-from backend.dependencies import PACKAGES, STACKS, normalize, read_manifests
+from backend.dependencies import STACKS, known_package, normalize, read_manifests
 from backend.models import Analysis, Dependency, EntryPoint, Evidence, Warning
 
 DATA_SUFFIXES = {".csv", ".tsv", ".json", ".txt", ".xlsx", ".parquet", ".npy", ".npz"}
@@ -41,9 +41,11 @@ def secret_files(files: dict[str, bytes]) -> set[str]:
     return result
 
 
-def read_environment(data: bytes | None) -> tuple[dict[str, str], str]:
+def read_environment(
+    data: bytes | None,
+) -> tuple[dict[str, str], dict[str, list[str]], str]:
     if not data:
-        return {}, ""
+        return {}, {}, ""
     try:
         report = json.loads(data)
         packages = report["packages"]
@@ -66,13 +68,28 @@ def read_environment(data: bytes | None) -> tuple[dict[str, str], str]:
             ):
                 raise ValueError
             clean[normalize(name)] = version
+        imports = report.get("imports", {})
+        if not isinstance(imports, dict) or len(imports) > 5000:
+            raise ValueError
+        for module, distributions in imports.items():
+            if (
+                not isinstance(module, str)
+                or not re.fullmatch(r"[A-Za-z_]\w*", module, flags=re.ASCII)
+                or not isinstance(distributions, list)
+                or not 1 <= len(distributions) <= 100
+            ):
+                raise ValueError
+            for package in distributions:
+                if not isinstance(package, str) or normalize(package) not in clean:
+                    raise ValueError
         return (
             clean,
+            imports,
             f"Python {python}; пакетов в предоставленном отчёте: {len(clean)}. Совместимость с проектом не проверена.",
         )
     except (ValueError, KeyError, TypeError, AttributeError, RecursionError) as error:
         raise ValueError(
-            "Не удалось прочитать отчёт среды. Создайте JSON командой tools/environment_report.py."
+            "Не удалось прочитать отчёт с версиями. Скачайте скрипт в разделе «Версии с компьютера автора» и загрузите созданный environment-report.json."
         ) from error
 
 
@@ -86,7 +103,14 @@ def local_module(
             parent = parent.parent
         roots = [parent]
     else:
-        roots = [PurePosixPath("."), PurePosixPath("src"), parent]
+        roots = [PurePosixPath("."), PurePosixPath("src")]
+        packaged = any(
+            (ancestor / "__init__.py").as_posix() in files
+            for ancestor in (parent, *parent.parents)
+            if ancestor != PurePosixPath(".")
+        )
+        if not packaged and module.split(".")[0] not in sys.stdlib_module_names:
+            roots.append(parent)
     for root in roots:
         candidate = (root / path).as_posix()
         if candidate + ".py" in files or candidate + "/__init__.py" in files:
@@ -227,7 +251,20 @@ def analyze_source(filename, files, record, warnings):
                 record(alias.name, filename, node.lineno)
         elif isinstance(node, ast.ImportFrom):
             if node.module:
-                record(node.module, filename, node.lineno, node.level, "from")
+                needs_parent = False
+                for alias in node.names:
+                    child = f"{node.module}.{alias.name}"
+                    prefix, candidates = known_package(child)
+                    if (
+                        not node.level
+                        and candidates
+                        and prefix.startswith(node.module + ".")
+                    ):
+                        record(child, filename, node.lineno, 0, "from")
+                    else:
+                        needs_parent = True
+                if needs_parent:
+                    record(node.module, filename, node.lineno, node.level, "from")
             elif node.level:
                 for alias in node.names:
                     record(alias.name, filename, node.lineno, node.level, "from")
@@ -346,7 +383,9 @@ def analyze(
     environment: bytes | None = None,
 ) -> Analysis:
     declared, python, python_source, conda, warnings = read_manifests(files)
-    environment_packages, environment_summary = read_environment(environment)
+    environment_packages, environment_imports, environment_summary = read_environment(
+        environment
+    )
     imported: dict[tuple[str, str], Dependency] = {}
     entries: list[EntryPoint] = []
     used_declarations: set[int] = set()
@@ -363,7 +402,12 @@ def analyze(
         if not root:
             return
         package = version = ""
-        if local_module(module, file, files, level):
+        lookup_allowed = False
+        prefix, candidates = known_package(module)
+        local = local_module(module, file, files, level)
+        if not level and root in sys.builtin_module_names:
+            kind, source = "standard", "Встроенный модуль интерпретатора Python"
+        elif local:
             kind, source = "local", "Модуль найден среди загруженных файлов"
             if root in sys.stdlib_module_names and not level:
                 warnings.append(
@@ -393,29 +437,95 @@ def analyze(
                 )
             )
         else:
-            candidate = PACKAGES.get(root, "")
+            environment_names = (
+                environment_imports.get(root, []) if prefix == root else []
+            )
+            names = {normalize(name) for name in candidates + tuple(environment_names)}
+            if prefix == root:
+                names.add(normalize(root))
             matches = [
                 (i, item)
                 for i, item in enumerate(declared)
-                if normalize(item["package"].split("[")[0])
-                == normalize(candidate or root)
+                if normalize(item["package"].split("[")[0]) in names
             ]
-            if matches:
-                i, item = matches[0]
+            matches.sort(key=lambda pair: pair[1]["optional"])
+            distributions = {
+                normalize(item["package"].split("[")[0]) for _, item in matches
+            }
+            if len(distributions) > 1:
+                kind, source = (
+                    "unknown",
+                    "В файлах зависимостей несколько вариантов пакета: "
+                    + ", ".join(sorted(distributions)),
+                )
+                warnings.append(
+                    Warning(
+                        code="package_variants",
+                        file=file,
+                        line=line,
+                        message=f"Для {module} заявлено несколько вариантов установки. Уточните нужный пакет.",
+                    )
+                )
+            elif matches:
+                item = matches[0][1]
                 package, version = item["package"], item["version"]
                 kind, source = "external", f"Заявлено в {item['source']}"
-                used_declarations.add(i)
-            elif candidate:
+                if item["group"]:
+                    source += f" ({item['group']})"
+                used_declarations.update(
+                    index
+                    for index, declared_item in matches
+                    if declared_item["version"] == version
+                    and declared_item["package"] == package
+                )
+                if any(
+                    declared_item["version"] != version for _, declared_item in matches
+                ):
+                    warnings.append(
+                        Warning(
+                            code="version_conflict",
+                            file=item["source"],
+                            message=f"Для {package} найдены разные ограничения версии. Основная группа имеет приоритет; проверьте остальные записи.",
+                        )
+                    )
+            elif len(environment_names) == 1:
                 package, kind, source = (
-                    candidate,
+                    environment_names[0],
+                    "external",
+                    "Соответствие из метаданных среды, предоставленной автором",
+                )
+            elif candidates:
+                package, kind, source = (
+                    candidates[0],
                     "external",
                     "Известное соответствие модуль → пакет; вариант сборки не проверен",
                 )
             else:
                 kind, source = "unknown", "Соответствие модуль → пакет неизвестно"
-            if root in STACKS:
-                stacks.add(STACKS[root])
-        key = (label if level else root, kind)
+                lookup_allowed = not environment_names
+                if environment_names:
+                    source = (
+                        "В среде автора этот импорт предоставляют несколько пакетов: "
+                        + ", ".join(environment_names)
+                    )
+            stack = STACKS.get(prefix, STACKS.get(root))
+            if stack:
+                stacks.add(stack)
+        if (
+            not level
+            and root in sys.stdlib_module_names
+            and not local
+            and local_module(root, file, files, 1)
+        ):
+            warnings.append(
+                Warning(
+                    code="shadowing",
+                    file=file,
+                    line=line,
+                    message=f"В папке есть {root}.py или одноимённый пакет. При прямом запуске файла он может перекрыть стандартный {root}; проверьте способ запуска. Установка через pip не нужна.",
+                )
+            )
+        key = (label if level else prefix, kind)
         if key not in imported:
             imported[key] = Dependency(
                 module=key[0],
@@ -426,6 +536,7 @@ def analyze(
                 environment_version=environment_packages.get(
                     normalize(package.split("[")[0]), ""
                 ),
+                lookup_allowed=lookup_allowed,
             )
         imported[key].evidence.append(
             Evidence(file=file, line=line, detail=f"{detail} {label}")
@@ -441,7 +552,7 @@ def analyze(
             feature_evidence = file_evidence
 
     for i, item in enumerate(declared):
-        if i not in used_declarations:
+        if i not in used_declarations and not item["optional"]:
             imported[(f"declared:{i}", "external")] = Dependency(
                 module=f"declared:{i}",
                 kind="external",

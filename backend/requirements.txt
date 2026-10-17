@@ -5,3 +5,4 @@ PyYAML==6.0.3
 packaging==26.3
 pydantic==2.14.1
 rarfile==4.2
+httpx==0.28.1

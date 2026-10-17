@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { analyzeProject, deleteProject } from "./api.js";
+import { analyzeProject, deleteProject, findPackages } from "./api.js";
 import Dependencies from "./components/Dependencies.jsx";
 import PackagePanel from "./components/PackagePanel.jsx";
 import UploadPanel from "./components/UploadPanel.jsx";
@@ -12,6 +12,11 @@ export default function App() {
   const [environment, setEnvironment] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [dependencies, setDependencies] = useState([]);
+  const [packageSearch, setPackageSearch] = useState({
+    pending: false,
+    results: {},
+    error: "",
+  });
   const [settings, setSettings] = useState({
     command: "",
     python_version: "3.12",
@@ -70,6 +75,18 @@ export default function App() {
         python_version: pythonVersion,
       }));
       setStep(1);
+      setPackageSearch({ pending: true, results: {}, error: "" });
+      try {
+        const results = await findPackages(result.id);
+        setPackageSearch({ pending: false, results, error: "" });
+      } catch (error) {
+        setPackageSearch({
+          pending: false,
+          results: {},
+          error:
+            "Поиск в PyPI недоступен. Неизвестные пакеты можно указать вручную.",
+        });
+      }
     } catch (error) {
       setError(error.message);
     } finally {
@@ -85,6 +102,7 @@ export default function App() {
       setAnalysis(null);
       analyzedInput.current = null;
       setDependencies([]);
+      setPackageSearch({ pending: false, results: {}, error: "" });
       setFiles([]);
       setEnvironment(null);
       setStep(0);
@@ -213,6 +231,7 @@ export default function App() {
               analysis={analysis}
               dependencies={dependencies}
               onChange={changeDependency}
+              packageSearch={packageSearch}
               onBack={() => changeStep(0)}
               onContinue={() => changeStep(2)}
             />

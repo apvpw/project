@@ -9,47 +9,241 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 
 from backend.models import Warning
 
-# Здесь только известные соответствия, а не догадки по похожему названию.
+# Пакеты с одинаковыми именами импорта и дистрибутива.
 PACKAGES = {
-    "numpy": "numpy",
-    "pandas": "pandas",
-    "scipy": "scipy",
-    "matplotlib": "matplotlib",
-    "seaborn": "seaborn",
-    "requests": "requests",
-    "httpx": "httpx",
-    "fastapi": "fastapi",
-    "uvicorn": "uvicorn",
-    "flask": "Flask",
-    "django": "Django",
-    "streamlit": "streamlit",
-    "pydantic": "pydantic",
-    "sqlalchemy": "SQLAlchemy",
-    "pytest": "pytest",
-    "PIL": "Pillow",
-    "cv2": "opencv-python",
-    "sklearn": "scikit-learn",
-    "yaml": "PyYAML",
-    "bs4": "beautifulsoup4",
-    "dotenv": "python-dotenv",
-    "dateutil": "python-dateutil",
-    "openpyxl": "openpyxl",
-    "torch": "torch",
-    "tensorflow": "tensorflow",
-    "transformers": "transformers",
-    "rich": "rich",
-    "click": "click",
-    "tqdm": "tqdm",
-    "aiohttp": "aiohttp",
-    "jinja2": "Jinja2",
-    "packaging": "packaging",
-    "sympy": "sympy",
-    "pygame": "pygame",
-    "plotly": "plotly",
-    "polars": "polars",
+    name: name
+    for name in (
+        "numpy pandas scipy matplotlib seaborn requests httpx fastapi uvicorn flask django "
+        "streamlit pydantic sqlalchemy pytest openpyxl torch torchvision torchaudio tensorflow "
+        "keras transformers tokenizers datasets accelerate safetensors rich click typer tqdm "
+        "aiohttp aiofiles anyio trio jinja2 packaging sympy pygame plotly polars pyarrow "
+        "xarray dask distributed numba numexpr statsmodels networkx bokeh altair holoviews "
+        "panel dash h5py tables zarr fsspec s3fs gcsfs duckdb rasterio geopandas shapely "
+        "pyproj fiona cartopy astropy obspy uncertainties pint lmfit joblib lightgbm xgboost "
+        "catboost optuna optax flax jax jaxlib nltk spacy gensim sentencepiece tiktoken "
+        "langchain langgraph openai anthropic ollama litellm chromadb faiss gradio chainlit "
+        "aiogram telethon discord alembic asyncpg aiomysql aiosqlite psycopg redis pymongo "
+        "motor peewee sqlalchemy_utils tortoise celery kombu rq dramatiq apscheduler "
+        "starlette quart sanic falcon bottle gunicorn hypercorn waitress websockets websocket "
+        "socketio engineio multipart orjson ujson msgpack toml tomlkit attrs attr "
+        "cattrs marshmallow dacite dataclasses_json jsonschema pydantic_settings pydantic_core "
+        "loguru structlog colorama termcolor tabulate prettytable backoff tenacity cachetools "
+        "diskcache wrapt deprecated boltons more_itertools toolz inflection slugify shortuuid "
+        "uuid6 ulid pendulum arrow pytz tzdata isodate croniter holidays humanize babel "
+        "cryptography bcrypt nacl jose jwt passlib paramiko fabric invoke psutil watchdog "
+        "platformdirs appdirs filelock portalocker nats confluent_kafka kafka pika stomp "
+        "boto3 botocore s3transfer minio sagemaker mlflow wandb tensorboard tensorboardX "
+        "hydra omegaconf dynaconf decouple environs pythonjsonlogger sentry_sdk prometheus_client "
+        "selenium playwright scrapy twisted lxml html5lib cssselect pdfplumber "
+        "pypdf pdfminer fitz reportlab docx pptx xlrd xlwt xlsxwriter pyxlsb odf imageio "
+        "skimage av soundfile librosa pydub mutagen moviepy ffmpeg yt_dlp requests_cache "
+        "requests_toolbelt urllib3 certifi charset_normalizer idna chardet faker hypothesis "
+        "coverage freezegun responses respx factory model_bakery testcontainers locust "
+        "tox nox ruff black isort mypy pre_commit sphinx mkdocs mkdocstrings build wheel "
+        "setuptools hatchling poetry pip pyperclip pyautogui qrcode barcode "
+        "serial usb bleak pyudev pyqtgraph PyQt5 PyQt6 PySide2 PySide6 wx kivy dearpygui "
+        "customtkinter textual prompt_toolkit pygments jedi parso ipykernel jupyterlab "
+        "notebook nbformat nbconvert nbclient papermill ipywidgets ipyparallel traitlets tornado "
+        "symengine qiskit pennylane cirq qutip brian2 simpy mesa deap SALib control trimesh "
+        "open3d laspy netCDF4 cftime pyreadstat pyogrio rapidfuzz fuzzywuzzy Levenshtein"
+    ).split()
 }
 
+# Отличия от имени импорта и составные namespace-пакеты.
+PACKAGES.update(
+    {
+        "numpy": "numpy",
+        "pandas": "pandas",
+        "scipy": "scipy",
+        "matplotlib": "matplotlib",
+        "seaborn": "seaborn",
+        "requests": "requests",
+        "httpx": "httpx",
+        "fastapi": "fastapi",
+        "uvicorn": "uvicorn",
+        "flask": "Flask",
+        "django": "Django",
+        "streamlit": "streamlit",
+        "pydantic": "pydantic",
+        "sqlalchemy": "SQLAlchemy",
+        "pytest": "pytest",
+        "PIL": "Pillow",
+        "cv2": "opencv-python",
+        "sklearn": "scikit-learn",
+        "yaml": "PyYAML",
+        "bs4": "beautifulsoup4",
+        "dotenv": "python-dotenv",
+        "dateutil": "python-dateutil",
+        "openpyxl": "openpyxl",
+        "torch": "torch",
+        "tensorflow": "tensorflow",
+        "transformers": "transformers",
+        "rich": "rich",
+        "click": "click",
+        "tqdm": "tqdm",
+        "aiohttp": "aiohttp",
+        "jinja2": "Jinja2",
+        "packaging": "packaging",
+        "sympy": "sympy",
+        "pygame": "pygame",
+        "plotly": "plotly",
+        "polars": "polars",
+        "pytest_asyncio": "pytest-asyncio",
+        "pytest_cov": "pytest-cov",
+        "pytest_mock": "pytest-mock",
+        "pytest_django": "pytest-django",
+        "pytest_httpx": "pytest-httpx",
+        "pytest_timeout": "pytest-timeout",
+        "pytest_benchmark": "pytest-benchmark",
+        "xdist": "pytest-xdist",
+        "telebot": "pyTelegramBotAPI",
+        "telegram": "python-telegram-bot",
+        "discord": "discord.py",
+        "websocket": "websocket-client",
+        "socketio": "python-socketio",
+        "engineio": "python-engineio",
+        "multipart": "python-multipart",
+        "skimage": "scikit-image",
+        "skopt": "scikit-optimize",
+        "imblearn": "imbalanced-learn",
+        "umap": "umap-learn",
+        "faiss": "faiss-cpu",
+        "sentence_transformers": "sentence-transformers",
+        "langchain_core": "langchain-core",
+        "langchain_community": "langchain-community",
+        "langchain_openai": "langchain-openai",
+        "langchain_text_splitters": "langchain-text-splitters",
+        "huggingface_hub": "huggingface-hub",
+        "cvxpy": "cvxpy",
+        "cvxopt": "cvxopt",
+        "tslearn": "tslearn",
+        "prophet": "prophet",
+        "Bio": "biopython",
+        "rdkit": "rdkit",
+        "MDAnalysis": "MDAnalysis",
+        "SimpleITK": "SimpleITK",
+        "nibabel": "nibabel",
+        "scvelo": "scvelo",
+        "scanpy": "scanpy",
+        "anndata": "anndata",
+        "sqlalchemy_utils": "SQLAlchemy-Utils",
+        "tortoise": "tortoise-orm",
+        "dataclasses_json": "dataclasses-json",
+        "pydantic_settings": "pydantic-settings",
+        "pydantic_core": "pydantic-core",
+        "more_itertools": "more-itertools",
+        "slugify": "python-slugify",
+        "nacl": "PyNaCl",
+        "jose": "python-jose",
+        "jwt": "PyJWT",
+        "confluent_kafka": "confluent-kafka",
+        "kafka": "kafka-python",
+        "stomp": "stomp.py",
+        "nats": "nats-py",
+        "hydra": "hydra-core",
+        "decouple": "python-decouple",
+        "sentry_sdk": "sentry-sdk",
+        "prometheus_client": "prometheus-client",
+        "opentelemetry.trace": "opentelemetry-api",
+        "opentelemetry.metrics": "opentelemetry-api",
+        "opentelemetry.sdk": "opentelemetry-sdk",
+        "pythonjsonlogger": "python-json-logger",
+        "docx": "python-docx",
+        "pptx": "python-pptx",
+        "pdfminer": "pdfminer.six",
+        "fitz": "PyMuPDF",
+        "odf": "odfpy",
+        "ffmpeg": "ffmpeg-python",
+        "yt_dlp": "yt-dlp",
+        "requests_cache": "requests-cache",
+        "requests_toolbelt": "requests-toolbelt",
+        "factory": "factory-boy",
+        "model_bakery": "model-bakery",
+        "pre_commit": "pre-commit",
+        "serial": "pyserial",
+        "usb": "pyusb",
+        "wx": "wxPython",
+        "attr": "attrs",
+        "IPython": "ipython",
+        "google.protobuf": "protobuf",
+        "google.auth": "google-auth",
+        "google.cloud.storage": "google-cloud-storage",
+        "google.cloud.bigquery": "google-cloud-bigquery",
+        "google.cloud.firestore": "google-cloud-firestore",
+        "google.cloud.pubsub": "google-cloud-pubsub",
+        "googleapiclient": "google-api-python-client",
+        "azure.identity": "azure-identity",
+        "azure.storage.blob": "azure-storage-blob",
+        "azure.cosmos": "azure-cosmos",
+        "ruamel.yaml": "ruamel.yaml",
+        "poetry.core": "poetry-core",
+        "Crypto": "pycryptodome",
+        "Cryptodome": "pycryptodomex",
+        "OpenSSL": "pyOpenSSL",
+        "dns": "dnspython",
+        "rest_framework": "djangorestframework",
+        "django_filters": "django-filter",
+        "corsheaders": "django-cors-headers",
+        "allauth": "django-allauth",
+        "flask_cors": "Flask-Cors",
+        "flask_sqlalchemy": "Flask-SQLAlchemy",
+        "sse_starlette": "sse-starlette",
+        "win32api": "pywin32",
+        "win32con": "pywin32",
+        "win32com": "pywin32",
+        "win32gui": "pywin32",
+        "pywintypes": "pywin32",
+    }
+)
+
+PACKAGE_ALTERNATIVES = {
+    "cv2": (
+        "opencv-python",
+        "opencv-python-headless",
+        "opencv-contrib-python",
+        "opencv-contrib-python-headless",
+    ),
+    "psycopg2": ("psycopg2", "psycopg2-binary"),
+    "faiss": ("faiss-cpu", "faiss-gpu"),
+    "tensorflow": (
+        "tensorflow",
+        "tensorflow-cpu",
+        "tensorflow-intel",
+        "tensorflow-macos",
+    ),
+}
+
+
+def known_package(module: str) -> tuple[str, tuple[str, ...]]:
+    parts = module.split(".")
+    for length in range(len(parts), 0, -1):
+        prefix = ".".join(parts[:length])
+        if prefix in PACKAGE_ALTERNATIVES:
+            return prefix, PACKAGE_ALTERNATIVES[prefix]
+        if prefix in PACKAGES:
+            return prefix, (PACKAGES[prefix],)
+    return parts[0], ()
+
+
 STACKS = {
+    "aiogram": "aiogram",
+    "telebot": "Telegram Bot",
+    "telegram": "Telegram Bot",
+    "telethon": "Telethon",
+    "sqlalchemy": "SQLAlchemy",
+    "alembic": "Alembic",
+    "redis": "Redis",
+    "celery": "Celery",
+    "pydantic": "Pydantic",
+    "transformers": "Transformers",
+    "jax": "JAX",
+    "lightgbm": "LightGBM",
+    "xgboost": "XGBoost",
+    "catboost": "CatBoost",
+    "geopandas": "GeoPandas",
+    "sympy": "SymPy",
+    "plotly": "Plotly",
+    "polars": "Polars",
     "numpy": "NumPy",
     "pandas": "pandas",
     "scipy": "SciPy",
@@ -92,9 +286,9 @@ def read_manifests(
     python_source = ""
     conda: list[str] = []
     warnings: list[Warning] = []
-    visited: set[str] = set()
+    visited: set[tuple[str, bool]] = set()
 
-    def add(text: str, source: str, group: str = ""):
+    def add(text: str, source: str, group: str = "", optional: bool = False):
         try:
             package, version = requirement_parts(text)
             declared.append(
@@ -103,6 +297,7 @@ def read_manifests(
                     "version": version,
                     "source": source,
                     "group": group,
+                    "optional": optional,
                 }
             )
         except ValueError:
@@ -114,12 +309,13 @@ def read_manifests(
                 )
             )
 
-    def read_requirements(name: str, depth: int = 0):
+    def read_requirements(name: str, depth: int = 0, optional: bool = False):
         from pathlib import PurePosixPath
 
-        if name in visited or depth > 10:
+        key = (name, optional)
+        if key in visited or depth > 10:
             return
-        visited.add(name)
+        visited.add(key)
         for raw in files[name].decode("utf-8-sig").splitlines():
             line = raw.split(" #", 1)[0].strip()
             if not line or line.startswith("#"):
@@ -127,7 +323,7 @@ def read_manifests(
             if line.startswith(("-r ", "--requirement ")):
                 target = PurePosixPath(name).parent / line.split(maxsplit=1)[1].strip()
                 if ".." not in target.parts and target.as_posix() in files:
-                    read_requirements(target.as_posix(), depth + 1)
+                    read_requirements(target.as_posix(), depth + 1, optional)
                 else:
                     warnings.append(
                         Warning(
@@ -137,13 +333,17 @@ def read_manifests(
                         )
                     )
             else:
-                add(line, name)
+                add(line, name, optional=optional)
 
     for name, data in sorted(files.items()):
         basename = name.rsplit("/", 1)[-1].lower()
         try:
-            if basename == "requirements.txt":
+            if basename in {"requirements.txt", "requirements.in"}:
                 read_requirements(name)
+            elif re.fullmatch(r"requirements[-_.][\w.-]+\.(?:txt|in)", basename) or (
+                name.startswith("requirements/") and basename.endswith((".txt", ".in"))
+            ):
+                read_requirements(name, optional=True)
             elif basename == "pyproject.toml":
                 document = tomllib.loads(data.decode("utf-8-sig"))
                 project = document.get("project", {})
@@ -162,13 +362,35 @@ def read_manifests(
                         python, python_source = candidate, name
                 for item in project.get("dependencies", []):
                     add(str(item), name)
-                if project.get("optional-dependencies"):
+                optional_groups = project.get("optional-dependencies", {})
+                dependency_groups = document.get("dependency-groups", {})
+                for group, requirements in optional_groups.items():
+                    if not isinstance(requirements, list):
+                        raise ValueError("Дополнительная группа должна быть списком")
+                    for item in requirements:
+                        add(str(item), name, f"extra:{group}", optional=True)
+                for group, requirements in dependency_groups.items():
+                    if not isinstance(requirements, list):
+                        raise ValueError("Группа зависимостей должна быть списком")
+                    for item in requirements:
+                        if isinstance(item, str):
+                            add(item, name, f"group:{group}", optional=True)
+                        elif isinstance(item, dict) and set(item) == {"include-group"}:
+                            # Читаем все группы; вложенная группа уже учтена отдельно.
+                            target = normalize(item["include-group"])
+                            if target not in {
+                                normalize(key) for key in dependency_groups
+                            }:
+                                raise ValueError("Подключённая группа не найдена")
+                        else:
+                            raise ValueError("Неизвестная запись группы зависимостей")
+                if optional_groups or dependency_groups:
                     warnings.append(
                         Warning(
                             code="optional_dependencies",
                             file=name,
                             level="info",
-                            message="В pyproject.toml есть дополнительные группы зависимостей. В черновик включена только основная группа.",
+                            message="Дополнительные группы прочитаны. Из них включены только пакеты, для которых найдены импорты; остальные инструменты разработки не добавляются.",
                         )
                     )
                 if project.get("dynamic"):

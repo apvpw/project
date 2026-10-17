@@ -257,14 +257,23 @@ export default function UploadPanel({
       </p>
 
       <details className="environment-input">
-        <summary>Есть отчёт среды с версиями?</summary>
+        <summary>Версии с компьютера автора (необязательно)</summary>
         <p>
-          Необязательно. Если проект работает на вашем компьютере, команда{" "}
-          <code>python tools/environment_report.py</code> сохранит версии в
-          JSON. Приложите его, чтобы видеть эти версии в деталях зависимостей.
+          Этот шаг можно пропустить. JSON — обычный текстовый файл со списком
+          версий Python и библиотек. Он помогает, если в проекте не указаны
+          версии зависимостей.
+        </p>
+        <a href="/api/environment-script" download="environment_report.py">
+          Скачать скрипт сбора версий
+        </a>
+        <p>
+          В окружении, где ваш проект уже работает, выполните{" "}
+          <code>python environment_report.py</code>. Затем приложите созданный
+          файл <code>environment-report.json</code>. Код проекта и переменные
+          окружения не собираются.
         </p>
         <label className="file-picker-label">
-          Выбрать JSON-отчёт
+          Прикрепить список версий
           <input
             type="file"
             name="environment"
@@ -286,6 +295,10 @@ export default function UploadPanel({
           </div>
         )}
       </details>
+      <p className="field-hint">
+        Неизвестные имена импортов проверяются в PyPI. Исходный код туда не
+        отправляется.
+      </p>
 
       <div className="panel-actions">
         <span className="field-hint">Структура папок сохранится в ZIP.</span>

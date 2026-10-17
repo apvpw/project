@@ -15,6 +15,7 @@ from backend.analyzer import analyze
 from backend.archive import MAX_UPLOAD, UploadError, read_uploads
 from backend.generator import archive_contents, build_zip, generate
 from backend.models import Analysis, PackageRequest, Warning
+from backend.registry import search_unknowns
 
 ROOT = Path(__file__).resolve().parent.parent
 SESSION_TTL = 30 * 60
@@ -189,6 +190,21 @@ def get_session(analysis_id: str):
         )
     _, files, analysis = sessions[analysis_id]
     return files, analysis
+
+
+@app.get("/api/projects/{analysis_id}/pypi")
+async def pypi_suggestions(analysis_id: str):
+    _, analysis = get_session(analysis_id)
+    return await search_unknowns(analysis.dependencies)
+
+
+@app.get("/api/environment-script")
+async def environment_script():
+    return FileResponse(
+        ROOT / "tools/environment_report.py",
+        filename="environment_report.py",
+        media_type="text/plain; charset=utf-8",
+    )
 
 
 @app.post("/api/preview")

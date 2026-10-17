@@ -2,7 +2,7 @@
 
 import json
 import platform
-from importlib.metadata import distributions
+from importlib.metadata import distributions, packages_distributions
 from pathlib import Path
 
 
@@ -15,6 +15,7 @@ if __name__ == "__main__":
     report = {
         "python_version": platform.python_version(),
         "packages": dict(sorted(packages.items())),
+        "imports": dict(sorted(packages_distributions().items())),
     }
     target = Path("environment-report.json")
     if target.exists():

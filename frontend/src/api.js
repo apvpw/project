@@ -48,6 +48,11 @@ export function analyzeProject(files, environment) {
   return upload("/api/analyze", files, environment);
 }
 
+export async function findPackages(analysisId) {
+  const response = await request(`/api/projects/${analysisId}/pypi`);
+  return response.json();
+}
+
 function post(path, options) {
   return request(path, {
     method: "POST",

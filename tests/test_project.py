@@ -9,6 +9,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
+import httpx
 from fastapi.testclient import TestClient
 
 from backend.analyzer import analyze
@@ -16,6 +17,7 @@ from backend.archive import MAX_FILE, UploadError, read_uploads
 from backend.generator import build_zip, generate
 from backend.main import app
 from backend.models import PackageOptions
+from backend.registry import cache, query_package, search_unknowns
 
 
 def zip_bytes(files):
@@ -37,6 +39,141 @@ def options(result, **kwargs):
 
 
 class AnalysisTests(unittest.TestCase):
+    def test_logging_in_package_is_not_a_dependency_to_install(self):
+        files = {
+            "app/__init__.py": b"",
+            "app/logging.py": b"import logging\ndef configure(): pass",
+            "app/main.py": b"import logging\nfrom app.logging import configure",
+            "app/bot/delivery.py": b"import logging",
+        }
+        result = inspect(files)
+        dependencies = {dep.module: dep for dep in result.dependencies}
+        self.assertEqual(dependencies["logging"].kind, "standard")
+        self.assertEqual(dependencies["app"].kind, "local")
+        self.assertTrue(any(w.code == "shadowing" for w in result.warnings))
+        requirements = generate(files, result, options(result))["requirements.txt"]
+        self.assertNotIn("УТОЧНИТЬ", requirements)
+
+    def test_root_shadow_and_explicit_relative_import_remain_local(self):
+        result = inspect({"main.py": b"import logging", "logging.py": b"pass"})
+        self.assertEqual(result.dependencies[0].kind, "local")
+        result = inspect(
+            {
+                "app/main.py": b"from .logging import configure",
+                "app/logging.py": b"pass",
+            }
+        )
+        self.assertEqual(result.dependencies[0].kind, "local")
+
+    def test_optional_dependencies_supply_versions_only_when_imported(self):
+        result = inspect(
+            {
+                "main.py": b"import aiogram\nimport pytest_asyncio",
+                "pyproject.toml": b'[project]\ndependencies=["aiogram>=3"]\n[project.optional-dependencies]\ntest=["pytest-asyncio==0.24.0", "ruff"]\n[dependency-groups]\ndocs=["sphinx"]\n',
+            }
+        )
+        found = {dep.package: dep.version for dep in result.dependencies}
+        self.assertEqual(found, {"aiogram": ">=3", "pytest-asyncio": "==0.24.0"})
+        self.assertIn("aiogram", result.stack)
+
+    def test_requirement_groups_do_not_hide_main_requirements(self):
+        result = inspect(
+            {
+                "main.py": b"import pytest_asyncio",
+                "requirements-dev.txt": b"-r requirements.txt\npytest-asyncio==0.24.0\nruff\n",
+                "requirements.txt": b"requests>=2\n",
+            }
+        )
+        found = {dep.package: dep.version for dep in result.dependencies}
+        self.assertEqual(found, {"pytest-asyncio": "==0.24.0", "requests": ">=2"})
+
+    def test_declared_opencv_variant_has_priority(self):
+        result = inspect(
+            {
+                "main.py": b"import cv2",
+                "requirements.txt": b"opencv-python-headless==4.10.0.84",
+            }
+        )
+        self.assertEqual(len(result.dependencies), 1)
+        self.assertEqual(result.dependencies[0].package, "opencv-python-headless")
+        self.assertEqual(result.dependencies[0].version, "==4.10.0.84")
+
+    def test_namespace_packages_are_not_merged_by_root(self):
+        result = inspect(
+            {
+                "main.py": b"from google.cloud import storage, bigquery\nfrom google.protobuf import message\nimport azure.storage.blob"
+            }
+        )
+        self.assertEqual(
+            {dep.package for dep in result.dependencies},
+            {
+                "google-cloud-storage",
+                "google-cloud-bigquery",
+                "protobuf",
+                "azure-storage-blob",
+            },
+        )
+        self.assertEqual(len(result.dependencies), 4)
+
+    def test_author_metadata_resolves_a_package_outside_the_catalog(self):
+        report = json.dumps(
+            {
+                "python_version": "3.12.1",
+                "packages": {"research-widget-sdk": "1.2.3"},
+                "imports": {"research_widget": ["research-widget-sdk"]},
+            }
+        ).encode()
+        result = inspect({"main.py": b"import research_widget"}, report)
+        dep = result.dependencies[0]
+        self.assertEqual(
+            (dep.kind, dep.package, dep.environment_version, dep.version),
+            ("external", "research-widget-sdk", "1.2.3", ""),
+        )
+
+    def test_author_metadata_recognizes_an_alternative_distribution(self):
+        report = json.dumps(
+            {
+                "python_version": "3.12.1",
+                "packages": {"py-cord": "2.6.0"},
+                "imports": {"discord": ["py-cord"]},
+            }
+        ).encode()
+        dependency = inspect({"main.py": b"import discord"}, report).dependencies[0]
+        self.assertEqual(dependency.package, "py-cord")
+        self.assertEqual(dependency.environment_version, "2.6.0")
+
+    def test_namespace_provider_lists_do_not_mix_different_imports(self):
+        report = json.dumps(
+            {
+                "python_version": "3.12.1",
+                "packages": {"google-cloud-storage": "2.0.0", "protobuf": "5.0.0"},
+                "imports": {"google": ["google-cloud-storage", "protobuf"]},
+            }
+        ).encode()
+        result = inspect(
+            {
+                "main.py": b"from google.cloud import storage\nimport google.protobuf",
+                "requirements.txt": b"google-cloud-storage>=2\nprotobuf>=5",
+            },
+            report,
+        )
+        self.assertEqual(
+            {dep.package: dep.kind for dep in result.dependencies},
+            {"google-cloud-storage": "external", "protobuf": "external"},
+        )
+
+    def test_namespace_with_multiple_author_providers_is_not_guessed(self):
+        report = json.dumps(
+            {
+                "python_version": "3.12.1",
+                "packages": {"one-sdk": "1.0", "two-sdk": "2.0"},
+                "imports": {"research_widget": ["one-sdk", "two-sdk"]},
+            }
+        ).encode()
+        dep = inspect({"main.py": b"import research_widget"}, report).dependencies[0]
+        self.assertEqual(dep.kind, "unknown")
+        self.assertFalse(dep.lookup_allowed)
+
     def test_standard_external_and_local_are_separated(self):
         result = inspect(
             {
@@ -161,6 +298,78 @@ class AnalysisTests(unittest.TestCase):
     def test_missing_data_is_reported(self):
         result = inspect({"main.py": b"import pandas as pd\npd.read_csv('absent.csv')"})
         self.assertTrue(any(w.code == "missing_data" for w in result.warnings))
+
+
+class RegistryTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        cache.clear()
+
+    async def test_found_package_is_a_suggestion_not_an_install_requirement(self):
+        calls = []
+
+        def respond(request):
+            calls.append(str(request.url))
+            return httpx.Response(
+                200,
+                json={
+                    "info": {
+                        "name": "emoji",
+                        "summary": "Emoji for Python",
+                        "version": "999.0",
+                    }
+                },
+            )
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            suggestion = await query_package("emoji", client)
+            await query_package("emoji", client)
+        self.assertEqual(suggestion["package"], "emoji")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0], "https://pypi.org/pypi/emoji/json")
+        files = {"main.py": b"import emoji"}
+        result = inspect(files)
+        self.assertEqual(result.dependencies[0].package, "")
+        requirements = generate(files, result, options(result))["requirements.txt"]
+        self.assertIn("УТОЧНИТЬ", requirements)
+        self.assertNotIn("999.0", requirements)
+
+    async def test_unknown_package_and_network_failure_are_distinct(self):
+        def respond(request):
+            if request.url.path.endswith("/missing/json"):
+                return httpx.Response(404)
+            raise httpx.ConnectError("offline")
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            self.assertEqual(
+                await query_package("missing", client), {"status": "not_found"}
+            )
+            self.assertEqual(
+                await query_package("offline", client), {"status": "unavailable"}
+            )
+
+    async def test_invalid_names_and_foreign_metadata_are_not_trusted(self):
+        def respond(request):
+            return httpx.Response(
+                200, json={"info": {"name": "different-package", "summary": ""}}
+            )
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            self.assertEqual(
+                await query_package("../private", client), {"status": "not_found"}
+            )
+            self.assertEqual(
+                await query_package("example", client), {"status": "unavailable"}
+            )
+
+    async def test_local_ambiguity_is_not_sent_to_pypi(self):
+        result = inspect(
+            {
+                "first/main.py": b"import helpers",
+                "first/helpers.py": b"pass",
+                "second/main.py": b"import helpers",
+            }
+        )
+        self.assertEqual(await search_unknowns(result.dependencies), {})
 
 
 class ArchiveTests(unittest.TestCase):
@@ -396,6 +605,16 @@ class ApiTests(unittest.TestCase):
 
     def tearDown(self):
         self.context.__exit__(None, None, None)
+
+    def test_environment_helper_is_downloadable(self):
+        response = self.client.get("/api/environment-script")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("environment_report.py", response.headers["content-disposition"])
+        self.assertIn("packages_distributions", response.text)
+
+    def test_pypi_lookup_requires_an_existing_upload(self):
+        response = self.client.get("/api/projects/missing/pypi")
+        self.assertEqual(response.status_code, 404)
 
     def test_folder_paths_survive_analysis_and_download(self):
         sources = {

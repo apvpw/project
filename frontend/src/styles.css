@@ -590,6 +590,30 @@ input::placeholder {
 .dependency-table td {
   padding: 11px 8px;
   border-bottom: 1px solid #e9edf3;
+  vertical-align: top;
+}
+.package-suggestion,
+.environment-version {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.package-suggestion > span,
+.environment-version > span {
+  display: block;
+}
+.package-suggestion > p {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.package-suggestion a,
+.environment-input a {
+  color: var(--blue);
+  text-underline-offset: 3px;
+}
+.package-suggestion .text-button,
+.environment-version .text-button {
+  font-size: 11px;
 }
 .dependency-table th:first-child,
 .dependency-table td:first-child {

@@ -19,6 +19,7 @@ class Dependency(BaseModel):
     source: str = ""
     evidence: list[Evidence] = Field(default_factory=list)
     environment_version: str = ""
+    lookup_allowed: bool = False
 
 
 class Warning(BaseModel):

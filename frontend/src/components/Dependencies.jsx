@@ -55,7 +55,13 @@ function Warnings({ warnings }) {
   );
 }
 
-function DependencyRow({ dependency, expanded, onToggle, onChange }) {
+function DependencyRow({
+  dependency,
+  expanded,
+  onToggle,
+  onChange,
+  suggestion,
+}) {
   const { module, package: packageName, kind } = dependency;
   const needsInstall = kind === "external" || kind === "unknown";
   const label = module.startsWith("declared:") ? packageName : module;
@@ -92,6 +98,41 @@ function DependencyRow({ dependency, expanded, onToggle, onChange }) {
                   onChange(module, "package", event.target.value)
                 }
               />
+              {!packageName && suggestion?.status === "found" && (
+                <div className="package-suggestion">
+                  <span>
+                    В PyPI есть{" "}
+                    <a href={suggestion.url} target="_blank" rel="noreferrer">
+                      {suggestion.package}
+                    </a>
+                    .
+                  </span>
+                  <p>{suggestion.summary}</p>
+                  <button
+                    className="text-button"
+                    onClick={() =>
+                      onChange(module, "package", suggestion.package)
+                    }
+                  >
+                    Использовать {suggestion.package}
+                  </button>
+                  <span>
+                    Совпадение имени не гарантирует соответствие импорту.
+                  </span>
+                </div>
+              )}
+              {!packageName && suggestion?.status === "not_found" && (
+                <p className="field-hint">
+                  По этому имени пакет в PyPI не найден. Название для pip может
+                  отличаться.
+                </p>
+              )}
+              {!packageName &&
+                ["unavailable", "skipped"].includes(suggestion?.status) && (
+                  <p className="field-hint">
+                    PyPI не проверен. Название можно указать вручную.
+                  </p>
+                )}
             </td>
             <td>
               <input
@@ -105,6 +146,25 @@ function DependencyRow({ dependency, expanded, onToggle, onChange }) {
                   onChange(module, "version", event.target.value)
                 }
               />
+              {dependency.environment_version && (
+                <div className="environment-version">
+                  <span>У автора: {dependency.environment_version}</span>
+                  {!dependency.version && (
+                    <button
+                      className="text-button"
+                      onClick={() =>
+                        onChange(
+                          module,
+                          "version",
+                          dependency.environment_version,
+                        )
+                      }
+                    >
+                      Подставить версию
+                    </button>
+                  )}
+                </div>
+              )}
             </td>
           </>
         ) : (
@@ -148,6 +208,7 @@ export default function Dependencies({
   onChange,
   onBack,
   onContinue,
+  packageSearch,
 }) {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -182,9 +243,12 @@ export default function Dependencies({
       </div>
       <div className="python-note">
         <strong>
-          Python: {analysis.python_requirement || "версия не определена"}
+          Требование к Python: {analysis.python_requirement || "не указано"}
         </strong>
         <p>{analysis.python_source}</p>
+        {analysis.environment_summary && (
+          <p>Среда автора: {analysis.environment_summary}</p>
+        )}
       </div>
       {dependencies.some(
         (dependency) =>
@@ -201,6 +265,16 @@ export default function Dependencies({
         <p className="notice">
           Пакеты не определены для {unresolved} импортов. Уточните их или
           оставьте в черновике.
+        </p>
+      )}
+      {packageSearch.pending && (
+        <p className="field-hint" role="status">
+          Ищем неизвестные пакеты в PyPI…
+        </p>
+      )}
+      {packageSearch.error && (
+        <p className="field-hint" role="status">
+          {packageSearch.error}
         </p>
       )}
       <div className="table-toolbar">
@@ -250,6 +324,7 @@ export default function Dependencies({
                 expanded={expanded === dependency.module}
                 onToggle={() => toggleEvidence(dependency.module)}
                 onChange={onChange}
+                suggestion={packageSearch.results[dependency.module]}
               />
             ))}
             {shown.length === 0 && (

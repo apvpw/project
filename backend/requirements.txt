@@ -1,0 +1,7 @@
+fastapi==0.143.3
+uvicorn==0.54.0
+python-multipart==0.0.32
+PyYAML==6.0.3
+packaging==26.3
+pydantic==2.14.1
+rarfile==4.2
